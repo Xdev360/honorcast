@@ -157,28 +157,18 @@ export default function ShopPage() {
 
   useEffect(() => {
     let mounted = true;
-    void loadProducts().then((next) => {
-      if (mounted) setProducts(next);
-    });
-
-    // Re-sync if admin saves from another tab
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "hc_products") {
-        void loadProducts().then((next) => {
-          if (mounted) setProducts(next);
-        });
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    const onFocus = () => {
+    const refresh = () => {
       void loadProducts().then((next) => {
         if (mounted) setProducts(next);
       });
     };
+    refresh();
+    const onFocus = () => {
+      refresh();
+    };
     window.addEventListener("focus", onFocus);
     return () => {
       mounted = false;
-      window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", onFocus);
     };
   }, []);

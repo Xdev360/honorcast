@@ -1,15 +1,24 @@
 "use client";
 
-import { useState, useEffect, type CSSProperties } from "react";
+import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { notifyHonorLocalStorage } from "@/lib/hc-form-sync";
 import { supabase } from "@/lib/supabase";
-import { getEvents, saveEvents } from "@/lib/db";
+import {
+  getEvents,
+  saveEvents,
+  getFormCategories,
+  createFormCategory,
+  updateFormCategory,
+  deleteFormCategory,
+  createFormField,
+  updateFormField,
+  deleteFormField,
+} from "@/lib/db";
 import {
   loadProducts,
   uploadProductImage,
   saveProducts,
-  cacheProducts,
   type Product,
   type ProductColor,
   DEFAULT_PRODUCTS,
@@ -555,14 +564,8 @@ function FieldEditor({
   );
 }
 function FormBuilderTab() {
-  const [cats, setCats] = useState<FormCategory[]>(() => {
-    try {
-      const s = localStorage.getItem("hc_form_cats");
-      return s ? (JSON.parse(s) as FormCategory[]) : INIT_CATS;
-    } catch {
-      return INIT_CATS;
-    }
-  });
+  const [cats, setCats] = useState<FormCategory[]>(INIT_CATS);
+  const [loading, setLoading] = useState(true);
   const [creatingCat, setCreatingCat] = useState(false);
   const [newCatLabel, setNewCatLabel] = useState("");
   const [editingCatId, setEditingCatId] = useState<number | null>(null);
@@ -575,60 +578,155 @@ function FormBuilderTab() {
 
   const persist = (updated: FormCategory[]) => {
     setCats(updated);
-    localStorage.setItem("hc_form_cats", JSON.stringify(updated));
     notifyHonorLocalStorage();
   };
 
+  const normalizeField = (f: Record<string, unknown>): FormField => ({
+    id: Number(f.id),
+    label: String(f.label ?? ""),
+    type: (String(f.type ?? "text") as FieldType),
+    note: String(f.note ?? ""),
+    placeholder: typeof f.placeholder === "string" ? f.placeholder : "",
+    placeholder2: typeof f.placeholder2 === "string" ? f.placeholder2 : "",
+    options: Array.isArray(f.options) ? (f.options as string[]) : undefined,
+    required: Boolean(f.required ?? true),
+  });
+
+  const hydrate = useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await getFormCategories();
+      if (!rows.length) {
+        setCats(INIT_CATS);
+        return;
+      }
+      const normalized: FormCategory[] = (rows as Record<string, unknown>[])
+        .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+        .map((c) => {
+          const fieldsRaw = Array.isArray(c.form_fields)
+            ? (c.form_fields as Record<string, unknown>[])
+            : [];
+          const fields = fieldsRaw
+            .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+            .map(normalizeField);
+          return {
+            id: Number(c.id),
+            label: String(c.label ?? ""),
+            fields,
+            expanded: true,
+          };
+        });
+      setCats(normalized);
+    } catch {
+      setCats(INIT_CATS);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+
   const toggleCat = (id: number) =>
     persist(cats.map((c) => (c.id === id ? { ...c, expanded: !c.expanded } : c)));
-  const saveCatLabel = (id: number) => {
+  const saveCatLabel = async (id: number) => {
     if (!editCatLabel.trim()) return;
+    await updateFormCategory(id, editCatLabel);
     persist(cats.map((c) => (c.id === id ? { ...c, label: editCatLabel } : c)));
     setEditingCatId(null);
   };
-  const addCat = () => {
+  const addCat = async () => {
     if (!newCatLabel.trim()) return;
-    persist([...cats, { id: Date.now(), label: newCatLabel, fields: [], expanded: true }]);
+    const created = await createFormCategory(newCatLabel, cats.length);
+    if (!created) return;
+    persist([
+      ...cats,
+      {
+        id: Number(created.id),
+        label: String(created.label),
+        fields: [],
+        expanded: true,
+      },
+    ]);
     setNewCatLabel("");
     setCreatingCat(false);
   };
-  const deleteCat = (id: number) => {
+  const deleteCat = async (id: number) => {
     if (!confirm("Delete this category and all its fields?")) return;
+    await deleteFormCategory(id);
     persist(cats.filter((c) => c.id !== id));
   };
 
-  const saveField = (catId: number, field: FormField) => {
-    persist(
-      cats.map((c) => {
-        if (c.id !== catId) return c;
-        const exists = c.fields.find((f) => f.id === field.id);
-        return {
-          ...c,
-          fields: exists ? c.fields.map((f) => (f.id === field.id ? field : f)) : [...c.fields, field],
-        };
-      }),
-    );
+  const saveField = async (catId: number, field: FormField) => {
+    const cat = cats.find((c) => c.id === catId);
+    if (!cat) return;
+    const payload: Record<string, unknown> = {
+      label: field.label,
+      type: field.type,
+      note: field.note,
+      placeholder: field.placeholder ?? "",
+      placeholder2: field.placeholder2 ?? "",
+      options: field.options ?? null,
+      required: field.required,
+    };
+    const exists = cat.fields.find((f) => f.id === field.id);
+    if (exists) {
+      await updateFormField(field.id, payload);
+      persist(
+        cats.map((c) =>
+          c.id !== catId
+            ? c
+            : {
+                ...c,
+                fields: c.fields.map((f) => (f.id === field.id ? field : f)),
+              },
+        ),
+      );
+    } else {
+      const created = await createFormField(catId, payload, cat.fields.length);
+      if (!created) return;
+      const savedField = normalizeField(created as Record<string, unknown>);
+      persist(
+        cats.map((c) =>
+          c.id !== catId
+            ? c
+            : {
+                ...c,
+                fields: [...c.fields, savedField],
+              },
+        ),
+      );
+    }
     setEditingField(null);
     setAddingFieldTo(null);
   };
 
-  const deleteField = (catId: number, fieldId: number) =>
+  const deleteField = async (catId: number, fieldId: number) => {
+    await deleteFormField(fieldId);
     persist(
       cats.map((c) =>
         c.id !== catId ? c : { ...c, fields: c.fields.filter((f) => f.id !== fieldId) },
       ),
     );
+  };
 
-  const moveField = (catId: number, fieldId: number, dir: -1 | 1) => {
-    persist(
-      cats.map((c) => {
-        if (c.id !== catId) return c;
-        const idx = c.fields.findIndex((f) => f.id === fieldId);
-        if ((dir === -1 && idx === 0) || (dir === 1 && idx === c.fields.length - 1)) return c;
-        const fields = [...c.fields];
-        [fields[idx], fields[idx + dir]] = [fields[idx + dir], fields[idx]];
-        return { ...c, fields };
-      }),
+  const moveField = async (catId: number, fieldId: number, dir: -1 | 1) => {
+    let nextFields: FormField[] = [];
+    const nextCats = cats.map((c) => {
+      if (c.id !== catId) return c;
+      const idx = c.fields.findIndex((f) => f.id === fieldId);
+      if ((dir === -1 && idx === 0) || (dir === 1 && idx === c.fields.length - 1)) return c;
+      const fields = [...c.fields];
+      [fields[idx], fields[idx + dir]] = [fields[idx + dir], fields[idx]];
+      nextFields = fields;
+      return { ...c, fields };
+    });
+    persist(nextCats);
+    await Promise.all(
+      nextFields.map((f, i) =>
+        updateFormField(f.id, { position: i }),
+      ),
     );
   };
 
@@ -719,7 +817,11 @@ function FormBuilderTab() {
         </div>
       ) : null}
 
-      {cats.map((cat) => (
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "40px 20px", color: "#aaa", fontSize: 12 }}>
+          Loading form builder...
+        </div>
+      ) : cats.map((cat) => (
         <div key={cat.id} style={{ background: "#fff", border: "1px solid #e5e5e5", marginBottom: 10 }}>
           <div
             style={{
@@ -1013,26 +1115,17 @@ export default function AdminPage() {
       try {
         const rows = await getEvents();
         if (mounted && rows.length > 0) {
-          const evRows = rows as EventRow[];
-          setEvents(evRows);
-          localStorage.setItem("hc_events", JSON.stringify(evRows));
+          setEvents(rows as EventRow[]);
           return;
         }
       } catch {
         /* ignore */
       }
-      try {
-        const evs = localStorage.getItem("hc_events");
-        if (evs && mounted) setEvents(JSON.parse(evs) as EventRow[]);
-      } catch {
-        /* ignore */
+      if (mounted) {
+        setEvents(INIT_EVENTS);
       }
     };
-    try {
-      void loadEventRows();
-    } catch {
-      /* ignore */
-    }
+    void loadEventRows();
     void loadProducts().then((next) => {
       if (mounted) setProducts(next);
     });
@@ -1053,12 +1146,10 @@ export default function AdminPage() {
 
   const persistEvents = (updated: EventRow[]) => {
     setEvents(updated);
-    localStorage.setItem("hc_events", JSON.stringify(updated));
     notifyHonorLocalStorage();
   };
   const persistProducts = (updated: Product[]) => {
     setProducts(updated);
-    cacheProducts(updated);
     notifyHonorLocalStorage();
   };
 

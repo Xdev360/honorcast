@@ -1,4 +1,6 @@
-/** Mirrors admin Form Builder types (persisted under `hc_form_cats`). */
+import { getFormCategories } from "./db";
+
+/** Mirrors admin Form Builder types (persisted in Supabase `form_categories`). */
 
 export type AdminFieldType =
   | "text"
@@ -115,15 +117,38 @@ export function notifyHonorLocalStorage() {
   window.dispatchEvent(new CustomEvent("honor-local-storage"));
 }
 
-export function loadApplicationStepsFromStorage(
+export async function loadApplicationSteps(
   fallback: ApplicationFormStep[],
-): ApplicationFormStep[] {
-  if (typeof window === "undefined") return fallback;
+): Promise<ApplicationFormStep[]> {
   try {
-    const raw = localStorage.getItem("hc_form_cats");
-    if (!raw) return fallback;
-    const cats = JSON.parse(raw) as AdminFormCategory[];
-    if (!Array.isArray(cats) || cats.length === 0) return fallback;
+    const rows = await getFormCategories();
+    if (!Array.isArray(rows) || rows.length === 0) return fallback;
+
+    const cats: AdminFormCategory[] = (rows as Record<string, unknown>[])
+      .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+      .map((cat) => {
+        const formFields = Array.isArray(cat.form_fields)
+          ? (cat.form_fields as Record<string, unknown>[])
+          : [];
+        return {
+          id: Number(cat.id),
+          label: String(cat.label ?? ""),
+          expanded: true,
+          fields: formFields
+            .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+            .map((f) => ({
+              id: Number(f.id),
+              label: String(f.label ?? ""),
+              type: (String(f.type ?? "text") as AdminFieldType),
+              note: String(f.note ?? ""),
+              placeholder: typeof f.placeholder === "string" ? f.placeholder : "",
+              placeholder2: typeof f.placeholder2 === "string" ? f.placeholder2 : "",
+              options: Array.isArray(f.options) ? (f.options as string[]) : undefined,
+              required: Boolean(f.required ?? true),
+            })),
+        };
+      });
+
     const steps = categoriesToSteps(cats);
     return steps.length > 0 ? steps : fallback;
   } catch {

@@ -6,7 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { submitApplication, uploadApplicationFile } from "@/lib/db";
 import {
   type ApplicationFormStep,
-  loadApplicationStepsFromStorage,
+  loadApplicationSteps,
   serializeExtraAnswers,
 } from "@/lib/hc-form-sync";
 
@@ -253,16 +253,18 @@ export default function FormPage() {
   const [steps, setSteps] = useState<ApplicationFormStep[]>(FALLBACK_STEPS);
 
   useEffect(() => {
+    let mounted = true;
     const load = () => {
-      setSteps(loadApplicationStepsFromStorage(FALLBACK_STEPS));
+      void loadApplicationSteps(FALLBACK_STEPS).then((next) => {
+        if (mounted) setSteps(next);
+      });
     };
     load();
     const onHonorLocal = () => load();
-    window.addEventListener("storage", load);
     window.addEventListener("focus", load);
     window.addEventListener("honor-local-storage", onHonorLocal);
     return () => {
-      window.removeEventListener("storage", load);
+      mounted = false;
       window.removeEventListener("focus", load);
       window.removeEventListener("honor-local-storage", onHonorLocal);
     };

@@ -197,27 +197,6 @@ function parseStoredProduct(raw: unknown): Product | null {
   return migrateLegacyProductRow(r);
 }
 
-function readLocalProducts(): Product[] {
-  if (typeof window === "undefined") return DEFAULT_PRODUCTS;
-  try {
-    const s = localStorage.getItem("hc_products");
-    if (s) {
-      const parsed = JSON.parse(s) as unknown;
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const out: Product[] = [];
-        for (const item of parsed) {
-          const p = parseStoredProduct(item);
-          if (p) out.push(p);
-        }
-        if (out.length) return out;
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_PRODUCTS;
-}
-
 export async function loadProducts(): Promise<Product[]> {
   try {
     const { data, error } = await supabase
@@ -228,23 +207,16 @@ export async function loadProducts(): Promise<Product[]> {
       const normalized = data
         .map((row) => parseStoredProduct(row as Record<string, unknown>))
         .filter((p): p is Product => p != null);
-      if (normalized.length === 0) return readLocalProducts();
-      if (typeof window !== "undefined") {
-        localStorage.setItem("hc_products", JSON.stringify(normalized));
-      }
+      if (normalized.length === 0) return DEFAULT_PRODUCTS;
       return normalized;
     }
   } catch {
     /* ignore */
   }
-  return readLocalProducts();
+  return DEFAULT_PRODUCTS;
 }
 
 export async function saveProducts(products: Product[]): Promise<boolean> {
-  if (typeof window !== "undefined") {
-    localStorage.setItem("hc_products", JSON.stringify(products));
-  }
-
   const rows = products.map((p) => ({
     id: p.id,
     name: p.name,
@@ -289,11 +261,6 @@ export async function saveProducts(products: Product[]): Promise<boolean> {
     console.error("Failed to save products:", e);
     return false;
   }
-}
-
-export function cacheProducts(products: Product[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("hc_products", JSON.stringify(products));
 }
 
 export async function uploadProductImage(

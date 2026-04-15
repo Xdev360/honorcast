@@ -209,26 +209,9 @@ export default function HomePage() {
       try {
         const rows = await getEvents();
         if (mounted && rows.length > 0) {
-          const fromDb = rows as HcEvent[];
-          setEvents(fromDb);
-          localStorage.setItem("hc_events", JSON.stringify(fromDb));
+          setEvents(rows as HcEvent[]);
           setEventsReady(true);
           return;
-        }
-      } catch {
-        /* ignore */
-      }
-      try {
-        const stored = localStorage.getItem("hc_events");
-        if (stored) {
-          const parsed = JSON.parse(stored) as HcEvent[];
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            if (mounted) {
-              setEvents(parsed);
-              setEventsReady(true);
-            }
-            return;
-          }
         }
       } catch {
         /* ignore */
@@ -245,26 +228,28 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    const sync = () => {
-      try {
-        const stored = localStorage.getItem("hc_events");
-        if (stored) {
-          const parsed = JSON.parse(stored) as HcEvent[];
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setEvents(parsed);
-            return;
+    let mounted = true;
+    const refresh = () => {
+      void getEvents()
+        .then((rows) => {
+          if (!mounted) return;
+          if (rows.length > 0) {
+            setEvents(rows as HcEvent[]);
+          } else {
+            setEvents(DEFAULT_EVENTS);
           }
-        }
-      } catch {
-        /* ignore */
-      }
-      setEvents(DEFAULT_EVENTS);
+        })
+        .catch(() => {
+          if (mounted) setEvents(DEFAULT_EVENTS);
+        });
     };
-    window.addEventListener("honor-local-storage", sync);
-    window.addEventListener("storage", sync);
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("honor-local-storage", refresh);
     return () => {
-      window.removeEventListener("honor-local-storage", sync);
-      window.removeEventListener("storage", sync);
+      mounted = false;
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("honor-local-storage", refresh);
     };
   }, []);
 
