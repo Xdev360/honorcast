@@ -8,8 +8,17 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const body = await req.json();
-  const { id, ...updates } = body as Record<string, unknown>;
-  const { error } = await supabase.from("events").update(updates).eq("id", id);
+  const body = (await req.json()) as Record<string, unknown>;
+  const { id, ...updates } = body;
+  const dbUpdates: Record<string, unknown> = { ...updates };
+  if ("spotsTotal" in dbUpdates) {
+    dbUpdates.spots_total = dbUpdates.spotsTotal;
+    delete dbUpdates.spotsTotal;
+  }
+  if ("spotsLeft" in dbUpdates) {
+    dbUpdates.spots_left = dbUpdates.spotsLeft;
+    delete dbUpdates.spotsLeft;
+  }
+  const { error } = await supabase.from("events").update(dbUpdates).eq("id", id);
   return NextResponse.json({ ok: !error, error: error?.message });
 }

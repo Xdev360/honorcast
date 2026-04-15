@@ -219,6 +219,41 @@ const INIT_CATS: FormCategory[] = [
   },
 ];
 
+const INIT_DINNER_INCLUDES = [
+  "Full multi-course dinner with curated seasonal menu",
+  "Welcome cocktail reception upon arrival",
+  "Seated dinner alongside both celebrity ambassadors",
+  "Professional photographer on site — personal shots included",
+  "Exclusive Honor Culture gift placed at your seat",
+  "Signed memorabilia from both celebrities",
+  "Intimate post-dinner mixer — invited guests only",
+];
+
+const INIT_GYM_INCLUDES = [
+  "Luxury Mercedes-Benz Sprinter fleet throughout",
+  "3-night VIP hotel stay (4-star minimum)",
+  "All meals every day — breakfast, lunch and dinner",
+  "Elite gym access across 3 cities",
+  "Train alongside both HC celebrity ambassadors",
+  "3-piece HC performance outfit + GymTour hoodie",
+  "Branded bag, shaker and accessories",
+  "Signed memorabilia from both celebrities",
+  "Professional photo and video content delivered post-tour",
+];
+
+function parseEventIncludes(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === "string") {
+    try {
+      const p = JSON.parse(raw) as unknown;
+      if (Array.isArray(p)) return p.map(String);
+    } catch {
+      /* ignore */
+    }
+  }
+  return [];
+}
+
 const INIT_EVENTS = [
   {
     id: 1,
@@ -233,6 +268,11 @@ const INIT_EVENTS = [
       "An intimate evening curated exclusively for Honor Culture's closest community. Limited to just 20 guests.",
     image_url: null as string | null,
     visible: true,
+    location: "Disclosed on booking",
+    dress_code: "Elevated Casual",
+    capacity: "",
+    description_extra: "",
+    includes: [...INIT_DINNER_INCLUDES],
   },
   {
     id: 2,
@@ -247,6 +287,11 @@ const INIT_EVENTS = [
       "A 3-day all-inclusive fitness and lifestyle experience across the United States. 30 spots only.",
     image_url: null as string | null,
     visible: true,
+    location: "Disclosed on booking",
+    dress_code: "Athletic / streetwear",
+    capacity: "",
+    description_extra: "",
+    includes: [...INIT_GYM_INCLUDES],
   },
 ];
 
@@ -1131,19 +1176,32 @@ export default function AdminPage() {
       .then((data) => {
         if (!Array.isArray(data) || data.length === 0) return;
         setEvents(
-          data.map((raw: Record<string, unknown>) => ({
-            id: Number(raw.id),
-            type: String(raw.type ?? "dinner"),
-            title: String(raw.title ?? ""),
-            subtitle: String(raw.subtitle ?? ""),
-            date: String(raw.date ?? ""),
-            price: Number(raw.price ?? 0),
-            spotsTotal: Number(raw.spots_total ?? raw.spotsTotal ?? 30),
-            spotsLeft: Number(raw.spots_left ?? raw.spotsLeft ?? 30),
-            description: String(raw.description ?? ""),
-            image_url: (raw.image_url as string | null) ?? null,
-            visible: Boolean(raw.visible ?? true),
-          })) as EventRow[],
+          data.map((raw: Record<string, unknown>) => {
+            const inc = parseEventIncludes(raw.includes);
+            return {
+              id: Number(raw.id),
+              type: String(raw.type ?? "dinner"),
+              title: String(raw.title ?? ""),
+              subtitle: String(raw.subtitle ?? ""),
+              date: String(raw.date ?? ""),
+              price: Number(raw.price ?? 0),
+              spotsTotal: Number(raw.spots_total ?? raw.spotsTotal ?? 30),
+              spotsLeft: Number(raw.spots_left ?? raw.spotsLeft ?? 30),
+              description: String(raw.description ?? ""),
+              image_url: (raw.image_url as string | null) ?? null,
+              visible: Boolean(raw.visible ?? true),
+              location: String(raw.location ?? "Disclosed on booking"),
+              dress_code: String(raw.dress_code ?? ""),
+              capacity: String(raw.capacity ?? ""),
+              description_extra: String(raw.description_extra ?? ""),
+              includes:
+                inc.length > 0
+                  ? inc
+                  : raw.type === "gymtour"
+                    ? [...INIT_GYM_INCLUDES]
+                    : [...INIT_DINNER_INCLUDES],
+            } as EventRow;
+          }),
         );
       })
       .finally(() => setEventsLoading(false));
@@ -1199,6 +1257,11 @@ export default function AdminPage() {
         description: ev.description,
         image_url: ev.image_url,
         visible: ev.visible,
+        location: ev.location,
+        dress_code: ev.dress_code,
+        capacity: ev.capacity,
+        description_extra: ev.description_extra,
+        includes: ev.includes,
       }),
     });
     const result = (await res.json()) as { ok?: boolean; error?: string };
@@ -2231,6 +2294,11 @@ export default function AdminPage() {
                                     description: evSaved.description,
                                     image_url: evSaved.image_url,
                                     visible: evSaved.visible,
+                                    location: evSaved.location,
+                                    dress_code: evSaved.dress_code,
+                                    capacity: evSaved.capacity,
+                                    description_extra: evSaved.description_extra,
+                                    includes: evSaved.includes,
                                   }),
                                 }).then(async (r) => {
                                   const result = (await r.json()) as { ok?: boolean; error?: string };
@@ -2364,6 +2432,127 @@ export default function AdminPage() {
                       >
                         {evEditData.visible ? "Visible" : "Hidden"}
                       </button>
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <span style={S.lbl}>Location (shown on detail page)</span>
+                      <input
+                        value={evEditData.location ?? ""}
+                        onChange={(e) =>
+                          setEvEditData((d: Partial<EventRow>) => ({ ...d, location: e.target.value }))
+                        }
+                        style={S.inp}
+                        placeholder="e.g. Disclosed on booking"
+                      />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <span style={S.lbl}>Dress Code</span>
+                      <input
+                        value={evEditData.dress_code ?? ""}
+                        onChange={(e) =>
+                          setEvEditData((d: Partial<EventRow>) => ({ ...d, dress_code: e.target.value }))
+                        }
+                        style={S.inp}
+                        placeholder="e.g. Elevated Casual"
+                      />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <span style={S.lbl}>Capacity Label</span>
+                      <input
+                        value={evEditData.capacity ?? ""}
+                        onChange={(e) =>
+                          setEvEditData((d: Partial<EventRow>) => ({ ...d, capacity: e.target.value }))
+                        }
+                        style={S.inp}
+                        placeholder="e.g. 20 guests only"
+                      />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <span style={S.lbl}>Additional Description (optional second paragraph)</span>
+                      <textarea
+                        value={evEditData.description_extra ?? ""}
+                        onChange={(e) =>
+                          setEvEditData((d: Partial<EventRow>) => ({
+                            ...d,
+                            description_extra: e.target.value,
+                          }))
+                        }
+                        rows={2}
+                        style={{ ...S.inp, resize: "vertical" } as CSSProperties}
+                        placeholder="Extra context shown below main description"
+                      />
+                    </div>
+                    <div style={{ marginBottom: 14 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: 8,
+                        }}
+                      >
+                        <span style={S.lbl}>What&apos;s Included (one item per line)</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEvEditData((d: Partial<EventRow>) => ({
+                              ...d,
+                              includes: [...(d.includes ?? []), ""],
+                            }))
+                          }
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            letterSpacing: ".08em",
+                            textTransform: "uppercase",
+                            padding: "3px 8px",
+                            border: "1.5px solid #000",
+                            background: "#fff",
+                            cursor: "pointer",
+                            borderRadius: 2,
+                          }}
+                        >
+                          + Add Item
+                        </button>
+                      </div>
+                      {(evEditData.includes ?? []).map((item: string, i: number) => (
+                        <div
+                          key={i}
+                          style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}
+                        >
+                          <input
+                            value={item}
+                            onChange={(e) => {
+                              const arr = [...(evEditData.includes ?? [])];
+                              arr[i] = e.target.value;
+                              setEvEditData((d: Partial<EventRow>) => ({ ...d, includes: arr }));
+                            }}
+                            style={{ ...S.inp, flex: 1 }}
+                            placeholder={`Included item ${i + 1}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEvEditData((d: Partial<EventRow>) => ({
+                                ...d,
+                                includes: (d.includes ?? []).filter((_, j) => j !== i),
+                              }))
+                            }
+                            style={{
+                              width: 26,
+                              height: 26,
+                              border: "1.5px solid #e0e0e0",
+                              background: "#fff",
+                              cursor: "pointer",
+                              fontSize: 14,
+                              color: "#aaa",
+                              flexShrink: 0,
+                              borderRadius: 2,
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
