@@ -1,3 +1,5 @@
+import { supabase } from "./supabase";
+
 export type ProductColor = {
   name: string;
   hex: string;
@@ -219,4 +221,27 @@ export function loadProducts(): Product[] {
 export function saveProducts(products: Product[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem("hc_products", JSON.stringify(products));
+}
+
+export async function uploadProductImage(
+  productId: number,
+  colorName: string,
+  slot: number,
+  file: File,
+): Promise<string | null> {
+  const ext = file.name.split(".").pop();
+  const path = `products/${productId}/${colorName.toLowerCase()}-${slot}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("honorculture")
+    .upload(path, file, { upsert: true });
+
+  if (error) {
+    console.error("Upload error:", error.message);
+    return null;
+  }
+
+  const { data } = supabase.storage.from("honorculture").getPublicUrl(path);
+
+  return data.publicUrl;
 }

@@ -3,8 +3,10 @@
 import { useState, useEffect, type CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { notifyHonorLocalStorage } from "@/lib/hc-form-sync";
+import { supabase } from "@/lib/supabase";
 import {
   loadProducts,
+  uploadProductImage,
   saveProducts,
   type Product,
   type ProductColor,
@@ -1658,21 +1660,45 @@ export default function AdminPage() {
                                       type="file"
                                       accept="image/*"
                                       style={{ display: "none" }}
-                                      onChange={(e) => {
+                                      onChange={async (e) => {
                                         if (!e.target.files?.[0]) return;
-                                        const reader = new FileReader();
-                                        reader.onload = (ev2) => {
-                                          const cols = ((prodEditData.colors as ProductColor[]) ?? []).map(
+                                        const file = e.target.files[0];
+
+                                        // Show a temporary local preview immediately
+                                        const localUrl = URL.createObjectURL(file);
+                                        const colsPreview = ((prodEditData.colors as ProductColor[]) ?? []).map(
+                                          (c, i) => {
+                                            if (i !== ci) return c;
+                                            const imgs = [...(c.images ?? [null, null, null, null])];
+                                            imgs[imgIdx] = localUrl;
+                                            return { ...c, images: imgs };
+                                          },
+                                        );
+                                        setProdEditData((d) => ({ ...d, colors: colsPreview }));
+
+                                        // Upload to Supabase Storage
+                                        const productId = Number(prodEditData.id);
+                                        const color = (prodEditData.colors as ProductColor[])?.[ci];
+                                        if (!Number.isFinite(productId) || !color) return;
+                                        const publicUrl = await uploadProductImage(
+                                          productId,
+                                          color.name,
+                                          imgIdx,
+                                          file,
+                                        );
+
+                                        if (publicUrl) {
+                                          // Replace temp blob URL with permanent Supabase URL
+                                          const colsFinal = ((prodEditData.colors as ProductColor[]) ?? []).map(
                                             (c, i) => {
                                               if (i !== ci) return c;
                                               const imgs = [...(c.images ?? [null, null, null, null])];
-                                              imgs[imgIdx] = ev2.target?.result as string;
+                                              imgs[imgIdx] = publicUrl;
                                               return { ...c, images: imgs };
                                             },
                                           );
-                                          setProdEditData((d) => ({ ...d, colors: cols }));
-                                        };
-                                        reader.readAsDataURL(e.target.files[0]);
+                                          setProdEditData((d) => ({ ...d, colors: colsFinal }));
+                                        }
                                       }}
                                     />
                                   </label>
@@ -1977,16 +2003,37 @@ export default function AdminPage() {
                           type="file"
                           accept="image/*"
                           style={{ display: "none" }}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const r = new FileReader();
-                              r.onload = (ev2) =>
-                                setEvEditData((d) => ({
-                                  ...d,
-                                  image_url: ev2.target?.result as string,
-                                }));
-                              r.readAsDataURL(file);
+                          onChange={async (e) => {
+                            if (!e.target.files?.[0]) return;
+                            const file = e.target.files[0];
+                            const ext = file.name.split(".").pop();
+                            const path = `events/${evEditData.id}-${Date.now()}.${ext}`;
+
+                            // Show local preview immediately
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            setEvEditData((d: any) => ({
+                              ...d,
+                              image_url: URL.createObjectURL(file),
+                            }));
+
+                            // Upload to Supabase
+                            const { error } = await supabase.storage
+                              .from("honorculture")
+                              .upload(path, file, { upsert: true });
+
+                            if (!error) {
+                              const { data } = supabase.storage
+                                .from("honorculture")
+                                .getPublicUrl(path);
+
+                              const updated = events.map((ev) =>
+                                ev.id === evEditData.id
+                                  ? { ...ev, image_url: data.publicUrl }
+                                  : ev,
+                              );
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                              setEvEditData((d: any) => ({ ...d, image_url: data.publicUrl }));
+                              persistEvents(updated);
                             }
                           }}
                         />
