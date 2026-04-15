@@ -1,0 +1,231 @@
+export type ProductColor = {
+  name: string;
+  hex: string;
+  images: (string | null)[]; // always 4 slots
+};
+
+export type Product = {
+  id: number;
+  name: string;
+  type: string;
+  price: number;
+  sizes: string[];
+  isNew: boolean;
+  colors: ProductColor[];
+};
+
+export const DEFAULT_COLORS: ProductColor[] = [
+  { name: "Black", hex: "#1a1a1a", images: [null, null, null, null] },
+  { name: "White", hex: "#f5f5f5", images: [null, null, null, null] },
+  { name: "Gray", hex: "#888888", images: [null, null, null, null] },
+];
+
+export const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: 1,
+    name: "Resolve Tee",
+    type: "tops",
+    price: 48,
+    sizes: ["XS", "S", "M", "L", "XL"],
+    isNew: true,
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    })),
+  },
+  {
+    id: 2,
+    name: "Honor Short",
+    type: "bottoms",
+    price: 62,
+    sizes: ["S", "M", "L", "XL"],
+    isNew: false,
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    })),
+  },
+  {
+    id: 3,
+    name: "Culture Hoodie",
+    type: "outerwear",
+    price: 95,
+    sizes: ["XS", "S", "M", "L", "XL", "XXL"],
+    isNew: true,
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    })),
+  },
+  {
+    id: 4,
+    name: "Mind Jogger",
+    type: "bottoms",
+    price: 78,
+    sizes: ["S", "M", "L", "XL"],
+    isNew: false,
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    })),
+  },
+  {
+    id: 5,
+    name: "Conflict Vest",
+    type: "tops",
+    price: 52,
+    sizes: ["S", "M", "L", "XL"],
+    isNew: true,
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    })),
+  },
+  {
+    id: 6,
+    name: "Legacy Set",
+    type: "sets",
+    price: 135,
+    sizes: ["S", "M", "L"],
+    isNew: false,
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    })),
+  },
+  {
+    id: 7,
+    name: "Spirit Track Top",
+    type: "outerwear",
+    price: 88,
+    sizes: ["S", "M", "L", "XL"],
+    isNew: true,
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    })),
+  },
+  {
+    id: 8,
+    name: "Forge Legging",
+    type: "bottoms",
+    price: 72,
+    sizes: ["XS", "S", "M", "L", "XL"],
+    isNew: false,
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    })),
+  },
+];
+
+function normalizeImages(images: unknown): (string | null)[] {
+  const arr = Array.isArray(images) ? images : [];
+  const out: (string | null)[] = [null, null, null, null];
+  for (let i = 0; i < 4; i++) out[i] = (arr[i] as string | null) ?? null;
+  return out;
+}
+
+function normalizeColors(colors: unknown): ProductColor[] {
+  if (!Array.isArray(colors) || colors.length === 0) {
+    return DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null],
+    }));
+  }
+  return colors.map((c: unknown) => {
+    const o = c as Record<string, unknown>;
+    return {
+      name: String(o.name ?? "Color"),
+      hex: String(o.hex ?? "#cccccc"),
+      images: normalizeImages(o.images),
+    };
+  });
+}
+
+/** Map legacy admin/shop rows (category, sizes string, single image) to Product. */
+export function migrateLegacyProductRow(row: Record<string, unknown>): Product {
+  const sizesStr = String(row.sizes ?? "");
+  const sizeList = sizesStr
+    .split(/[,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const img = row.image ?? row.image_url;
+  const colors = DEFAULT_COLORS.slice(0, 3).map((c) => ({
+    ...c,
+    images: [null, null, null, null] as (string | null)[],
+  }));
+  if (typeof img === "string" && img.length > 0) {
+    colors[0] = {
+      ...colors[0],
+      images: [img, null, null, null],
+    };
+  }
+  return {
+    id: Number(row.id),
+    name: String(row.name ?? ""),
+    type: String(row.category ?? row.type ?? "tops"),
+    price: Number(row.price ?? 0),
+    sizes: sizeList.length ? sizeList : ["S", "M", "L"],
+    isNew: Boolean(row.new ?? row.isNew ?? false),
+    colors,
+  };
+}
+
+function parseStoredProduct(raw: unknown): Product | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "number" && typeof r.id !== "string") return null;
+  const id = Number(r.id);
+  if (!Number.isFinite(id)) return null;
+  const hasColors = Array.isArray(r.colors) && r.colors.length > 0;
+  if (hasColors) {
+    return {
+      id,
+      name: String(r.name ?? ""),
+      type: String(r.type ?? r.category ?? "tops"),
+      price: Number(r.price ?? 0),
+      sizes: Array.isArray(r.sizes)
+        ? (r.sizes as unknown[]).map(String)
+        : migrateLegacyProductRow(r).sizes,
+      isNew: Boolean(r.isNew ?? r.new ?? false),
+      colors: normalizeColors(r.colors),
+    };
+  }
+  return migrateLegacyProductRow(r);
+}
+
+export function loadProducts(): Product[] {
+  if (typeof window === "undefined") return DEFAULT_PRODUCTS;
+  try {
+    const s = localStorage.getItem("hc_products_v2");
+    if (s) {
+      const parsed = JSON.parse(s) as unknown;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const out: Product[] = [];
+        for (const item of parsed) {
+          const p = parseStoredProduct(item);
+          if (p) out.push(p);
+        }
+        if (out.length) return out;
+      }
+    }
+    const legacy = localStorage.getItem("hc_products");
+    if (legacy) {
+      const arr = JSON.parse(legacy) as unknown;
+      if (Array.isArray(arr) && arr.length > 0) {
+        return arr.map((item) =>
+          migrateLegacyProductRow(item as Record<string, unknown>),
+        );
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_PRODUCTS;
+}
+
+export function saveProducts(products: Product[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("hc_products_v2", JSON.stringify(products));
+}

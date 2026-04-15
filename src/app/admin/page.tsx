@@ -3,6 +3,13 @@
 import { useState, useEffect, type CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { notifyHonorLocalStorage } from "@/lib/hc-form-sync";
+import {
+  loadProducts,
+  saveProducts,
+  type Product,
+  type ProductColor,
+  DEFAULT_PRODUCTS,
+} from "@/lib/products";
 
 type FieldType =
   | "text"
@@ -202,18 +209,6 @@ const INIT_CATS: FormCategory[] = [
   },
 ];
 
-const INIT_PRODUCTS = [
-  { id: 1, name: "Resolve Tee", price: 48, category: "tops", sizes: "XS,S,M,L,XL", image: null as string | null },
-  { id: 2, name: "Honor Short", price: 62, category: "bottoms", sizes: "S,M,L,XL", image: null as string | null },
-  { id: 3, name: "Culture Hoodie", price: 95, category: "outerwear", sizes: "XS,S,M,L,XL,XXL", image: null as string | null },
-  { id: 4, name: "Mind Jogger", price: 78, category: "bottoms", sizes: "S,M,L,XL", image: null as string | null },
-  { id: 5, name: "Conflict Vest", price: 52, category: "tops", sizes: "S,M,L,XL", image: null as string | null },
-  { id: 6, name: "Legacy Set", price: 135, category: "sets", sizes: "S,M,L", image: null as string | null },
-  { id: 7, name: "Spirit Track Top", price: 88, category: "outerwear", sizes: "S,M,L,XL", image: null as string | null },
-  { id: 8, name: "Forge Legging", price: 72, category: "bottoms", sizes: "XS,S,M,L,XL", image: null as string | null },
-];
-
-type ProductRow = (typeof INIT_PRODUCTS)[number];
 const INIT_EVENTS = [
   {
     id: 1,
@@ -992,9 +987,9 @@ export default function AdminPage() {
   const [tab, setTab] = useState("applications");
   const [apps, setApps] = useState<Record<string, unknown>[]>([]);
   const [appsLoading, setAppsLoading] = useState(true);
-  const [products, setProducts] = useState<ProductRow[]>([...INIT_PRODUCTS]);
+  const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS);
   const [editingProdId, setEditingProdId] = useState<number | null>(null);
-  const [prodEditData, setProdEditData] = useState<Partial<ProductRow>>({});
+  const [prodEditData, setProdEditData] = useState<Record<string, unknown>>({});
   const [events, setEvents] = useState<EventRow[]>([...INIT_EVENTS]);
   const [editingEvId, setEditingEvId] = useState<number | null>(null);
   const [evEditData, setEvEditData] = useState<Partial<EventRow>>({});
@@ -1012,8 +1007,7 @@ export default function AdminPage() {
     try {
       const evs = localStorage.getItem("hc_events");
       if (evs) setEvents(JSON.parse(evs) as EventRow[]);
-      const prods = localStorage.getItem("hc_products");
-      if (prods) setProducts(JSON.parse(prods) as ProductRow[]);
+      setProducts(loadProducts());
     } catch {
       /* ignore */
     }
@@ -1034,7 +1028,7 @@ export default function AdminPage() {
     localStorage.setItem("hc_events", JSON.stringify(updated));
     notifyHonorLocalStorage();
   };
-  const persistProducts = (updated: ProductRow[]) => {
+  const persistProducts = (updated: Product[]) => {
     setProducts(updated);
     localStorage.setItem("hc_products", JSON.stringify(updated));
     notifyHonorLocalStorage();
@@ -1083,6 +1077,32 @@ export default function AdminPage() {
       " · " +
       d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
     );
+  };
+
+  const openApplicantMedia = (photoUrl: string, videoUrl: string) => {
+    if (photoUrl) window.open(photoUrl, "_blank", "noopener,noreferrer");
+    if (videoUrl) {
+      window.setTimeout(() => {
+        window.open(videoUrl, "_blank", "noopener,noreferrer");
+      }, 400);
+    }
+  };
+
+  const downloadApplicationsJson = () => {
+    if (apps.length === 0) {
+      window.alert("No applications loaded yet.");
+      return;
+    }
+    const name = `honor-applications-${new Date().toISOString().slice(0, 10)}.json`;
+    const blob = new Blob([JSON.stringify(apps, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   if (!authed) {
@@ -1418,72 +1438,14 @@ export default function AdminPage() {
         {tab === "products" && (
           <div>
             <h2 style={{ fontSize: 18, fontWeight: 900, textTransform: "uppercase", marginBottom: 16 }}>Products</h2>
-            {products.map((p) => (
+            {products.map((p) => {
+              const listThumb =
+                p.colors?.flatMap((c) => c.images).find((u) => u != null && u !== "") ?? null;
+              return (
               <div key={p.id} style={{ background: "#fff", border: "1px solid #e5e5e5", marginBottom: 10, padding: 14 }}>
                 {editingProdId === p.id ? (
                   <div>
-                    <div style={{ marginBottom: 14 }}>
-                      <span style={S.lbl}>Product Image</span>
-                      <label
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          border: "2px dashed #ddd",
-                          padding: 20,
-                          cursor: "pointer",
-                          gap: 8,
-                          minHeight: 80,
-                        }}
-                      >
-                        {prodEditData.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={prodEditData.image}
-                            style={{ width: "100%", maxHeight: 160, objectFit: "cover" }}
-                            alt="product"
-                          />
-                        ) : (
-                          <>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                              <rect x="3" y="3" width="18" height="18" rx="2" stroke="#ccc" strokeWidth="1.5" />
-                              <circle cx="8.5" cy="8.5" r="1.5" stroke="#ccc" strokeWidth="1.5" />
-                              <path d="M21 15l-5-5L5 21" stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" />
-                            </svg>
-                            <span
-                              style={{
-                                fontSize: 10,
-                                fontWeight: 700,
-                                color: "#aaa",
-                                textTransform: "uppercase",
-                                letterSpacing: ".08em",
-                              }}
-                            >
-                              Upload Image
-                            </span>
-                          </>
-                        )}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          style={{ display: "none" }}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const r = new FileReader();
-                              r.onload = (ev2) =>
-                                setProdEditData((d) => ({
-                                  ...d,
-                                  image: ev2.target?.result as string,
-                                }));
-                              r.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
                       {(
                         [
                           { label: "Product Name", key: "name" as const, type: "text" },
@@ -1508,32 +1470,309 @@ export default function AdminPage() {
                         </div>
                       ))}
                     </div>
+
+                    <div style={{ marginBottom: 16 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: 10,
+                        }}
+                      >
+                        <span style={S.lbl}>Colors & Images</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newColor: ProductColor = {
+                              name: "New Color",
+                              hex: "#cccccc",
+                              images: [null, null, null, null],
+                            };
+                            setProdEditData((d) => ({
+                              ...d,
+                              colors: [...((d.colors as ProductColor[]) ?? []), newColor],
+                            }));
+                          }}
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            letterSpacing: ".08em",
+                            textTransform: "uppercase",
+                            padding: "4px 10px",
+                            border: "1.5px solid #000",
+                            background: "#fff",
+                            cursor: "pointer",
+                            borderRadius: 2,
+                          }}
+                        >
+                          + Add Color
+                        </button>
+                      </div>
+
+                      {((prodEditData.colors as ProductColor[]) ?? []).map((color, ci) => (
+                        <div
+                          key={ci}
+                          style={{
+                            border: "1px solid #e5e5e5",
+                            marginBottom: 10,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              padding: "10px 12px",
+                              background: "#fafafa",
+                              borderBottom: "1px solid #f0f0f0",
+                            }}
+                          >
+                            <div style={{ position: "relative", flexShrink: 0 }}>
+                              <div
+                                style={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: "50%",
+                                  background: color.hex,
+                                  border: "2px solid #e0e0e0",
+                                  cursor: "pointer",
+                                  position: "relative",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <input
+                                  type="color"
+                                  value={color.hex}
+                                  onChange={(e) => {
+                                    const cols = [...((prodEditData.colors as ProductColor[]) ?? [])];
+                                    cols[ci] = { ...cols[ci], hex: e.target.value };
+                                    setProdEditData((d) => ({ ...d, colors: cols }));
+                                  }}
+                                  style={{
+                                    position: "absolute",
+                                    inset: -4,
+                                    width: "calc(100% + 8px)",
+                                    height: "calc(100% + 8px)",
+                                    opacity: 0,
+                                    cursor: "pointer",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <input
+                              value={color.name}
+                              onChange={(e) => {
+                                const cols = [...((prodEditData.colors as ProductColor[]) ?? [])];
+                                cols[ci] = { ...cols[ci], name: e.target.value };
+                                setProdEditData((d) => ({ ...d, colors: cols }));
+                              }}
+                              placeholder="Color name"
+                              style={{
+                                flex: 1,
+                                border: "none",
+                                borderBottom: "1px solid #e0e0e0",
+                                padding: "4px 0",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                outline: "none",
+                                background: "transparent",
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cols = ((prodEditData.colors as ProductColor[]) ?? []).filter(
+                                  (_, i) => i !== ci,
+                                );
+                                setProdEditData((d) => ({ ...d, colors: cols }));
+                              }}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "#dc2626",
+                                cursor: "pointer",
+                                fontSize: 16,
+                                lineHeight: 1,
+                                padding: 2,
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+
+                          <div style={{ padding: "10px 12px" }}>
+                            <p style={{ ...S.lbl, marginBottom: 8 }}>
+                              Images for {color.name} (up to 4 — swipeable in shop)
+                            </p>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+                              {([0, 1, 2, 3] as const).map((imgIdx) => (
+                                <div key={imgIdx} style={{ position: "relative" }}>
+                                  <label
+                                    style={{
+                                      display: "block",
+                                      aspectRatio: "3/4",
+                                      border: "1.5px dashed #e0e0e0",
+                                      cursor: "pointer",
+                                      overflow: "hidden",
+                                      borderRadius: 2,
+                                      background: "#fafafa",
+                                    }}
+                                  >
+                                    {color.images?.[imgIdx] ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={color.images[imgIdx]!}
+                                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                        alt={`${color.name} ${imgIdx + 1}`}
+                                      />
+                                    ) : (
+                                      <div
+                                        style={{
+                                          width: "100%",
+                                          height: "100%",
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          gap: 3,
+                                        }}
+                                      >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                          <rect x="3" y="3" width="18" height="18" rx="2" stroke="#ccc" strokeWidth="1.5" />
+                                          <circle cx="8.5" cy="8.5" r="1.5" stroke="#ccc" strokeWidth="1.5" />
+                                          <path
+                                            d="M21 15l-5-5L5 21"
+                                            stroke="#ccc"
+                                            strokeWidth="1.5"
+                                            strokeLinecap="round"
+                                          />
+                                        </svg>
+                                        <span style={{ fontSize: 8, color: "#ccc", fontWeight: 700 }}>
+                                          {imgIdx + 1}
+                                        </span>
+                                      </div>
+                                    )}
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      style={{ display: "none" }}
+                                      onChange={(e) => {
+                                        if (!e.target.files?.[0]) return;
+                                        const reader = new FileReader();
+                                        reader.onload = (ev2) => {
+                                          const cols = ((prodEditData.colors as ProductColor[]) ?? []).map(
+                                            (c, i) => {
+                                              if (i !== ci) return c;
+                                              const imgs = [...(c.images ?? [null, null, null, null])];
+                                              imgs[imgIdx] = ev2.target?.result as string;
+                                              return { ...c, images: imgs };
+                                            },
+                                          );
+                                          setProdEditData((d) => ({ ...d, colors: cols }));
+                                        };
+                                        reader.readAsDataURL(e.target.files[0]);
+                                      }}
+                                    />
+                                  </label>
+                                  {color.images?.[imgIdx] ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const cols = ((prodEditData.colors as ProductColor[]) ?? []).map(
+                                          (c, i) => {
+                                            if (i !== ci) return c;
+                                            const imgs = [...(c.images ?? [null, null, null, null])];
+                                            imgs[imgIdx] = null;
+                                            return { ...c, images: imgs };
+                                          },
+                                        );
+                                        setProdEditData((d) => ({ ...d, colors: cols }));
+                                      }}
+                                      style={{
+                                        position: "absolute",
+                                        top: 2,
+                                        right: 2,
+                                        width: 16,
+                                        height: 16,
+                                        borderRadius: "50%",
+                                        background: "rgba(0,0,0,0.6)",
+                                        border: "none",
+                                        color: "#fff",
+                                        fontSize: 10,
+                                        cursor: "pointer",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        lineHeight: 1,
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  ) : null}
+                                  {imgIdx === 0 ? (
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        bottom: 2,
+                                        left: 2,
+                                        background: "rgba(0,0,0,0.5)",
+                                        color: "#fff",
+                                        fontSize: 7,
+                                        padding: "1px 4px",
+                                        letterSpacing: ".04em",
+                                        textTransform: "uppercase",
+                                      }}
+                                    >
+                                      Main
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         type="button"
                         onClick={() => {
                           if (editingProdId == null) return;
-                          persistProducts(
-                            products.map((x) =>
-                              x.id === editingProdId
-                                ? {
-                                    ...x,
-                                    ...prodEditData,
-                                    price: Number(prodEditData.price),
-                                    name: String(prodEditData.name ?? x.name),
-                                    category: String(prodEditData.category ?? x.category),
-                                    sizes: String(prodEditData.sizes ?? x.sizes),
-                                    image:
-                                      prodEditData.image !== undefined ? prodEditData.image : x.image,
-                                  }
-                                : x,
-                            ),
+                          const base = products.find((x) => x.id === editingProdId);
+                          if (!base) return;
+                          const sizeStr = String(prodEditData.sizes ?? "");
+                          const sizeList = sizeStr
+                            .split(/[,]+/)
+                            .map((s) => s.trim())
+                            .filter(Boolean);
+                          const cols = (prodEditData.colors as ProductColor[]) ?? base.colors;
+                          const normalized: ProductColor[] = cols.map((c) => ({
+                            ...c,
+                            images: [0, 1, 2, 3].map((i) => c.images?.[i] ?? null),
+                          }));
+                          const updated: Product[] = products.map((x) =>
+                            x.id === editingProdId
+                              ? {
+                                  ...x,
+                                  name: String(prodEditData.name ?? x.name),
+                                  price: Number(prodEditData.price),
+                                  type: String(prodEditData.category ?? x.type),
+                                  sizes: sizeList.length ? sizeList : x.sizes,
+                                  colors: normalized,
+                                  isNew: x.isNew,
+                                }
+                              : x,
                           );
+                          persistProducts(updated);
+                          saveProducts(updated);
                           setEditingProdId(null);
                         }}
                         style={{
                           flex: 1,
-                          padding: 10,
+                          padding: 11,
                           background: "#000",
                           color: "#fff",
                           fontSize: 10,
@@ -1551,7 +1790,7 @@ export default function AdminPage() {
                         onClick={() => setEditingProdId(null)}
                         style={{
                           flex: 1,
-                          padding: 10,
+                          padding: 11,
                           background: "#fff",
                           color: "#000",
                           fontSize: 10,
@@ -1580,9 +1819,13 @@ export default function AdminPage() {
                         justifyContent: "center",
                       }}
                     >
-                      {p.image ? (
+                      {listThumb ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.image} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt={p.name} />
+                        <img
+                          src={listThumb}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          alt={p.name}
+                        />
                       ) : (
                         <span style={{ fontSize: 9, color: "#ccc", fontWeight: 700 }}>HC</span>
                       )}
@@ -1590,14 +1833,18 @@ export default function AdminPage() {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{p.name}</div>
                       <div style={{ fontSize: 10, color: "#aaa" }}>
-                        ${p.price} · {p.category} · {p.sizes}
+                        ${p.price} · {p.type} · {p.sizes.join(",")}
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
                         setEditingProdId(p.id);
-                        setProdEditData({ ...p });
+                        setProdEditData({
+                          ...p,
+                          category: p.type,
+                          sizes: p.sizes.join(","),
+                        });
                       }}
                       style={{
                         padding: "7px 14px",
@@ -1615,7 +1862,8 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -1994,7 +2242,10 @@ export default function AdminPage() {
         {tab === "downloads" && (
           <div>
             <h2 style={{ fontSize: 18, fontWeight: 900, textTransform: "uppercase", marginBottom: 6 }}>Downloads</h2>
-            <p style={{ fontSize: 11, color: "#aaa", marginBottom: 20 }}>Download files submitted by applicants.</p>
+            <p style={{ fontSize: 11, color: "#aaa", marginBottom: 20 }}>
+              Photo / Video open the file in a new tab (same as Applications). &quot;All Files&quot; opens both.
+              &quot;Download everything&quot; saves all application records as JSON (includes media URLs).
+            </p>
             {apps.map((app) => {
               const aid = Number(app.id);
               const displayName = String(app.full_name ?? app.name ?? "Applicant");
@@ -2057,17 +2308,19 @@ export default function AdminPage() {
                   ))}
                   <button
                     type="button"
+                    disabled={!hasPhoto && !hasVideo}
+                    onClick={() => openApplicantMedia(photoUrl, videoUrl)}
                     style={{
                       flex: 1,
                       padding: "8px 10px",
-                      border: "1.5px solid #000",
-                      background: "#000",
-                      color: "#fff",
+                      border: `1.5px solid ${hasPhoto || hasVideo ? "#000" : "#e5e5e5"}`,
+                      background: hasPhoto || hasVideo ? "#000" : "#f5f5f5",
+                      color: hasPhoto || hasVideo ? "#fff" : "#ccc",
                       fontSize: 9,
                       fontWeight: 700,
                       letterSpacing: ".08em",
                       textTransform: "uppercase",
-                      cursor: "pointer",
+                      cursor: hasPhoto || hasVideo ? "pointer" : "default",
                     }}
                   >
                     All Files
@@ -2078,21 +2331,23 @@ export default function AdminPage() {
             })}
             <button
               type="button"
+              disabled={apps.length === 0}
+              onClick={() => downloadApplicationsJson()}
               style={{
                 width: "100%",
                 padding: 13,
-                background: "#000",
-                color: "#fff",
+                background: apps.length === 0 ? "#e5e5e5" : "#000",
+                color: apps.length === 0 ? "#999" : "#fff",
                 fontSize: 10,
                 fontWeight: 700,
                 letterSpacing: ".2em",
                 textTransform: "uppercase",
                 border: "none",
-                cursor: "pointer",
+                cursor: apps.length === 0 ? "default" : "pointer",
                 marginTop: 8,
               }}
             >
-              ↓ Download Everything
+              ↓ Download Everything (JSON)
             </button>
           </div>
         )}

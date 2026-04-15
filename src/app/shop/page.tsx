@@ -3,74 +3,140 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { getProducts } from "@/lib/db";
+import { ProductCard } from "@/components/ProductCard";
+import {
+  loadProducts,
+  type Product,
+  DEFAULT_PRODUCTS,
+} from "@/lib/products";
 
-const PRODUCTS = [
-  {
-    id: 1,
-    name: "Resolve Tee",
-    type: "tops",
-    price: 48,
-    sizes: ["XS", "S", "M", "L", "XL"],
-    new: true,
-  },
-  {
-    id: 2,
-    name: "Honor Short",
-    type: "bottoms",
-    price: 62,
-    sizes: ["S", "M", "L", "XL"],
-    new: false,
-  },
-  {
-    id: 3,
-    name: "Culture Hoodie",
-    type: "outerwear",
-    price: 95,
-    sizes: ["XS", "S", "M", "L", "XL", "XXL"],
-    new: true,
-  },
-  {
-    id: 4,
-    name: "Mind Jogger",
-    type: "bottoms",
-    price: 78,
-    sizes: ["S", "M", "L", "XL"],
-    new: false,
-  },
-  {
-    id: 5,
-    name: "Conflict Vest",
-    type: "tops",
-    price: 52,
-    sizes: ["S", "M", "L", "XL"],
-    new: true,
-  },
-  {
-    id: 6,
-    name: "Legacy Set",
-    type: "sets",
-    price: 135,
-    sizes: ["S", "M", "L"],
-    new: false,
-  },
-  {
-    id: 7,
-    name: "Spirit Track Top",
-    type: "outerwear",
-    price: 88,
-    sizes: ["S", "M", "L", "XL"],
-    new: true,
-  },
-  {
-    id: 8,
-    name: "Forge Legging",
-    type: "bottoms",
-    price: 72,
-    sizes: ["XS", "S", "M", "L", "XL"],
-    new: false,
-  },
-];
+function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const go = (path: string) => {
+    onClose();
+    router.push(path);
+  };
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.5)",
+              zIndex: 40,
+            }}
+          />
+          <motion.div
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "tween", duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: 280,
+              background: "#fff",
+              zIndex: 50,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "18px 20px",
+                borderBottom: "1px solid #f0f0f0",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: ".2em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Honor Culture
+              </span>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 24,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ flex: 1 }}>
+              {[
+                { label: "Home", action: () => go("/home") },
+                { label: "Shop", action: () => onClose() },
+                { label: "Apply to be a Model", action: () => go("/apply") },
+                { label: "Events", action: () => go("/home#events") },
+                { label: "Join Our Team", action: () => go("/home#jointeam") },
+              ].map((link, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={link.action}
+                  style={{
+                    width: "100%",
+                    padding: "18px 20px",
+                    textAlign: "left",
+                    background: "none",
+                    border: "none",
+                    borderBottom: "1px solid #f5f5f5",
+                    fontSize: 15,
+                    fontWeight: 900,
+                    letterSpacing: ".04em",
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                    color: "#000",
+                  }}
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ padding: "20px", borderTop: "1px solid #f0f0f0" }}>
+              <p
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: ".2em",
+                  textTransform: "uppercase",
+                  color: "#ccc",
+                  marginBottom: 3,
+                }}
+              >
+                Honor Culture
+              </p>
+              <p style={{ fontSize: 10, color: "#ccc" }}>@h0n0rculture.cast</p>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Products loaded from localStorage (admin edits live here)
 
 function generateOrderId() {
   const s = () =>
@@ -78,114 +144,51 @@ function generateOrderId() {
   return `HC-${s()}-${s()}-${s()}`;
 }
 
-type ShopProduct = {
-  id: number;
-  name: string;
-  type: string;
-  price: number;
-  sizes: string[];
-  new: boolean;
-  image: string | null;
-};
-
-function rowToShopProduct(r: Record<string, unknown>): ShopProduct {
-  const sizesStr = String(r.sizes ?? "");
-  const sizeList = sizesStr
-    .split(/[,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const img = r.image ?? r.image_url;
-  return {
-    id: Number(r.id),
-    name: String(r.name ?? ""),
-    type: String(r.category ?? "tops"),
-    price: Number(r.price ?? 0),
-    sizes: sizeList.length ? sizeList : ["S", "M", "L"],
-    new: Boolean(r.new ?? false),
-    image:
-      typeof img === "string" && img.length > 0 ? img : null,
-  };
-}
-
 export default function ShopPage() {
-  const [productList, setProductList] = useState<ShopProduct[]>(() =>
-    PRODUCTS.map((p) => ({ ...p, image: null as string | null })),
-  );
+  const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS);
   const [cart, setCart] = useState<{ id: number; size: string }[]>([]);
   const [sizes, setSizes] = useState<Record<number, string>>({});
-  const [open, setOpen] = useState<number | null>(null);
   const [category, setCategory] = useState("all");
   const [orderId, setOrderId] = useState(() => generateOrderId());
   const [showModal, setShowModal] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    let cancelled = false;
-
-    const applyLocal = () => {
-      try {
-        const raw = localStorage.getItem("hc_products");
-        if (!raw) return false;
-        const arr = JSON.parse(raw) as unknown;
-        if (!Array.isArray(arr) || arr.length === 0) return false;
-        setProductList(arr.map((r) => rowToShopProduct(r as Record<string, unknown>)));
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    const load = async () => {
-      if (applyLocal()) return;
-      try {
-        const rows = await getProducts();
-        if (cancelled || !rows.length) return;
-        setProductList(
-          rows.map((r) => rowToShopProduct(r as Record<string, unknown>)),
-        );
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    void load();
+    const reload = () => setProducts(loadProducts());
+    reload();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "hc_products" || e.key === null) void load();
+      if (
+        e.key === "hc_products_v2" ||
+        e.key === "hc_products" ||
+        e.key === null
+      ) {
+        reload();
+      }
     };
-    const onHonorLocal = () => void load();
+    const onHonorLocal = () => reload();
     window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", load);
+    window.addEventListener("focus", reload);
     window.addEventListener("honor-local-storage", onHonorLocal);
     return () => {
-      cancelled = true;
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", load);
+      window.removeEventListener("focus", reload);
       window.removeEventListener("honor-local-storage", onHonorLocal);
     };
   }, []);
 
   const filtered =
     category === "all"
-      ? productList
-      : productList.filter((p) => p.type === category);
+      ? products
+      : products.filter((p) => p.type === category);
   const inCart = (id: number) => !!cart.find((c) => c.id === id);
   const maxed = cart.length >= 2;
-
-  const toggleCart = (id: number) => {
-    if (inCart(id)) {
-      setCart(cart.filter((c) => c.id !== id));
-      return;
-    }
-    if (maxed || !sizes[id]) return;
-    setCart([...cart, { id, size: sizes[id] }]);
-    setOpen(null);
-  };
 
   const downloadInvoice = async () => {
     setDownloading(true);
     const cartItems = cart.map((c) => {
-      const p = productList.find((pr) => pr.id === c.id)!;
+      const p = products.find((pr) => pr.id === c.id)!;
       return { ...p, selectedSize: c.size };
     });
     let finalOrderId = orderId;
@@ -340,12 +343,17 @@ export default function ShopPage() {
 
   return (
     <main className="min-h-screen bg-white">
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <div className="bg-black px-4 py-2 text-center text-[10px] uppercase tracking-[.12em] text-white">
         Model Portal — Select Up To 2 Pieces
       </div>
 
       <nav className="sticky top-0 z-30 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
-        <button type="button" onClick={() => router.back()} className="p-0.5">
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          className="p-0.5"
+        >
           <svg width="20" height="14" viewBox="0 0 20 14" fill="none">
             <rect width="20" height="1.5" rx=".75" fill="#000" />
             <rect y="6" width="14" height="1.5" rx=".75" fill="#000" />
@@ -479,118 +487,29 @@ export default function ShopPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-px bg-gray-100 pb-32">
-        {filtered.map((product: ShopProduct) => {
-          const picked = inCart(product.id);
-          const disabled = maxed && !picked;
-          return (
-            <div
-              key={product.id}
-              className={`relative bg-white ${disabled ? "pointer-events-none opacity-40" : ""}`}
-            >
-              <div
-                role="button"
-                tabIndex={0}
-                className="relative flex aspect-[3/4] cursor-pointer items-center justify-center bg-gray-50"
-                onClick={() => setOpen(open === product.id ? null : product.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setOpen(open === product.id ? null : product.id);
-                  }
-                }}
-              >
-                {product.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={product.image}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="text-[56px] font-black tracking-tighter text-gray-100">
-                    HC
-                  </span>
-                )}
-                {product.new && !picked && (
-                  <span className="absolute right-2 top-2 bg-black px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">
-                    New
-                  </span>
-                )}
-                {picked && (
-                  <motion.span
-                    className="absolute left-2 top-2 bg-black px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white"
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    Selected
-                  </motion.span>
-                )}
-              </div>
-              <div
-                role="button"
-                tabIndex={0}
-                className="cursor-pointer px-2.5 pb-1 pt-2"
-                onClick={() => setOpen(open === product.id ? null : product.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setOpen(open === product.id ? null : product.id);
-                  }
-                }}
-              >
-                <p className="text-[12px] font-semibold leading-tight text-black">
-                  {product.name}
-                </p>
-                <p className="mt-0.5 text-[12px] text-black">${product.price}</p>
-              </div>
-              <AnimatePresence>
-                {open === product.id && (
-                  <motion.div
-                    className="px-2.5 pb-3"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <p className="mb-1.5 text-[9px] uppercase tracking-[.1em] text-gray-400">
-                      Select Size
-                    </p>
-                    <div className="mb-2 flex flex-wrap gap-1">
-                      {product.sizes.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() =>
-                            setSizes((p) => ({ ...p, [product.id]: s }))
-                          }
-                          className={`border px-2 py-1 text-[10px] font-semibold transition-all ${
-                            sizes[product.id] === s
-                              ? "border-black bg-black text-white"
-                              : "border-gray-200 text-gray-500 hover:border-black"
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleCart(product.id)}
-                      disabled={!sizes[product.id] && !picked}
-                      className={`w-full py-2.5 text-[10px] font-bold uppercase tracking-[.15em] transition-all ${
-                        picked
-                          ? "border-2 border-black bg-white text-black"
-                          : "bg-black text-white disabled:bg-gray-200 disabled:text-gray-400"
-                      }`}
-                    >
-                      {picked ? "Remove" : "Add to Bag"}
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
+        {filtered.map((product) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            inCart={inCart(product.id)}
+            maxed={maxed}
+            selectedSize={sizes[product.id]}
+            onSizeSelect={(s) =>
+              setSizes((p) => ({ ...p, [product.id]: s }))
+            }
+            onToggleCart={() => {
+              if (inCart(product.id)) {
+                setCart((c) => c.filter((x) => x.id !== product.id));
+              } else {
+                if (maxed || !sizes[product.id]) return;
+                setCart((c) => [
+                  ...c,
+                  { id: product.id, size: sizes[product.id] },
+                ]);
+              }
+            }}
+          />
+        ))}
       </div>
 
       <AnimatePresence>
