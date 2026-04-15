@@ -258,10 +258,36 @@ export async function saveProducts(products: Product[]): Promise<boolean> {
       null,
   }));
 
+  const legacyRows = products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    category: p.type,
+    price: p.price,
+    sizes: p.sizes.join(","),
+    new: p.isNew,
+    image_url:
+      p.colors.flatMap((c) => c.images).find((u) => typeof u === "string") ??
+      null,
+  }));
+
   try {
     const { error } = await supabase
       .from("products")
       .upsert(rows, { onConflict: "id" });
+
+    // Backward compatibility: if schema has no `colors` column, retry
+    // with legacy fields so saves still work until DB migration is applied.
+    if (error?.message?.includes("Could not find the 'colors' column")) {
+      const { error: legacyError } = await supabase
+        .from("products")
+        .upsert(legacyRows, { onConflict: "id" });
+      if (legacyError) {
+        console.error("Failed to save products:", legacyError.message);
+        return false;
+      }
+      return true;
+    }
+
     if (error) {
       console.error("Failed to save products:", error.message);
       return false;
