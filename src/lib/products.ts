@@ -169,12 +169,12 @@ export function migrateLegacyProductRow(row: Record<string, unknown>): Product {
     type: String(row.category ?? row.type ?? "tops"),
     price: Number(row.price ?? 0),
     sizes: sizeList.length ? sizeList : ["S", "M", "L"],
-    isNew: Boolean(row.new ?? row.isNew ?? false),
+    isNew: Boolean(row.new ?? row.is_new ?? row.isNew ?? false),
     colors,
   };
 }
 
-function parseStoredProduct(raw: unknown): Product | null {
+export function parseStoredProduct(raw: unknown): Product | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   if (typeof r.id !== "number" && typeof r.id !== "string") return null;
@@ -190,7 +190,7 @@ function parseStoredProduct(raw: unknown): Product | null {
       sizes: Array.isArray(r.sizes)
         ? (r.sizes as unknown[]).map(String)
         : migrateLegacyProductRow(r).sizes,
-      isNew: Boolean(r.isNew ?? r.new ?? false),
+      isNew: Boolean(r.isNew ?? r.new ?? r.is_new ?? false),
       colors: normalizeColors(r.colors),
     };
   }

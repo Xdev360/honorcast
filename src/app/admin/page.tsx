@@ -5,8 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { notifyHonorLocalStorage } from "@/lib/hc-form-sync";
 import { supabase } from "@/lib/supabase";
 import {
-  getEvents,
-  saveEvents,
   getFormCategories,
   createFormCategory,
   updateFormCategory,
@@ -16,9 +14,8 @@ import {
   deleteFormField,
 } from "@/lib/db";
 import {
-  loadProducts,
   uploadProductImage,
-  saveProducts,
+  parseStoredProduct,
   type Product,
   type ProductColor,
   DEFAULT_PRODUCTS,
@@ -1108,31 +1105,49 @@ export default function AdminPage() {
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [eventSaved, setEventSaved] = useState<number | null>(null);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
-    const loadEventRows = async () => {
-      try {
-        const rows = await getEvents();
-        if (mounted && rows.length > 0) {
-          setEvents(rows as EventRow[]);
-          return;
-        }
-      } catch {
-        /* ignore */
-      }
-      if (mounted) {
-        setEvents(INIT_EVENTS);
-      }
-    };
-    void loadEventRows();
-    void loadProducts().then((next) => {
-      if (mounted) setProducts(next);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    if (!authed) return;
+    setProductsLoading(true);
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data) || data.length === 0) return;
+        const next = data
+          .map((row: unknown) => parseStoredProduct(row))
+          .filter((p): p is Product => p != null);
+        if (next.length > 0) setProducts(next);
+      })
+      .finally(() => setProductsLoading(false));
+  }, [authed]);
+
+  useEffect(() => {
+    if (!authed) return;
+    setEventsLoading(true);
+    fetch("/api/events")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data) || data.length === 0) return;
+        setEvents(
+          data.map((raw: Record<string, unknown>) => ({
+            id: Number(raw.id),
+            type: String(raw.type ?? "dinner"),
+            title: String(raw.title ?? ""),
+            subtitle: String(raw.subtitle ?? ""),
+            date: String(raw.date ?? ""),
+            price: Number(raw.price ?? 0),
+            spotsTotal: Number(raw.spots_total ?? raw.spotsTotal ?? 30),
+            spotsLeft: Number(raw.spots_left ?? raw.spotsLeft ?? 30),
+            description: String(raw.description ?? ""),
+            image_url: (raw.image_url as string | null) ?? null,
+            visible: Boolean(raw.visible ?? true),
+          })) as EventRow[],
+        );
+      })
+      .finally(() => setEventsLoading(false));
+  }, [authed]);
 
   useEffect(() => {
     if (!authed) return;
@@ -1148,11 +1163,6 @@ export default function AdminPage() {
     setEvents(updated);
     notifyHonorLocalStorage();
   };
-  const persistProducts = (updated: Product[]) => {
-    setProducts(updated);
-    notifyHonorLocalStorage();
-  };
-
   const login = () => {
     if (pass.trim().toUpperCase() === "HONOR2025") setAuthed(true);
     else {
@@ -1172,10 +1182,27 @@ export default function AdminPage() {
     });
   };
 
-  const saveEvent = (ev: EventRow) => {
-    const updated = events.map((e) => (e.id === ev.id ? ev : e));
-    persistEvents(updated);
-    void saveEvents(updated as unknown as Record<string, unknown>[]);
+  const saveEvent = async (ev: EventRow) => {
+    setEvents((prev) => prev.map((e) => (e.id === ev.id ? ev : e)));
+    const res = await fetch("/api/events", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: ev.id,
+        type: ev.type,
+        title: ev.title,
+        subtitle: ev.subtitle,
+        date: ev.date,
+        price: ev.price,
+        spots_total: ev.spotsTotal,
+        spots_left: ev.spotsLeft,
+        description: ev.description,
+        image_url: ev.image_url,
+        visible: ev.visible,
+      }),
+    });
+    const result = (await res.json()) as { ok?: boolean; error?: string };
+    if (!result.ok) window.alert("Save failed: " + (result.error ?? "unknown"));
     setEditingEvId(null);
     setEventSaved(ev.id);
     window.setTimeout(() => setEventSaved(null), 2500);
@@ -1559,6 +1586,9 @@ export default function AdminPage() {
         {tab === "products" && (
           <div>
             <h2 style={{ fontSize: 18, fontWeight: 900, textTransform: "uppercase", marginBottom: 16 }}>Products</h2>
+            {productsLoading ? (
+              <p style={{ fontSize: 11, color: "#aaa", marginBottom: 12 }}>Loading products…</p>
+            ) : null}
             {products.map((p) => {
               const listThumb =
                 p.colors?.flatMap((c) => c.images).find((u) => u != null && u !== "") ?? null;
@@ -1885,28 +1915,54 @@ export default function AdminPage() {
                       <button
                         type="button"
                         onClick={async () => {
-                          const updated = products.map((x) =>
-                            x.id === editingProdId
-                              ? {
-                                  ...x,
-                                  name: String(prodEditData.name ?? x.name),
-                                  price: Number(prodEditData.price),
-                                  type: String(prodEditData.category ?? x.type),
-                                  sizes:
-                                    typeof prodEditData.sizes === "string"
-                                      ? prodEditData.sizes
-                                          .split(",")
-                                          .map((s: string) => s.trim())
-                                          .filter(Boolean)
-                                      : Array.isArray(prodEditData.sizes)
-                                        ? prodEditData.sizes.map((s) => String(s))
-                                        : x.sizes,
-                                  colors: (prodEditData.colors as ProductColor[]) ?? x.colors,
-                                }
-                              : x,
+                          if (editingProdId == null) return;
+                          const updates = {
+                            id: editingProdId,
+                            name: prodEditData.name,
+                            price: Number(prodEditData.price),
+                            category: prodEditData.category,
+                            sizes:
+                              typeof prodEditData.sizes === "string"
+                                ? prodEditData.sizes
+                                : Array.isArray(prodEditData.sizes)
+                                  ? prodEditData.sizes.join(",")
+                                  : "",
+                            colors: prodEditData.colors,
+                            is_new: Boolean(
+                              prodEditData.is_new ?? prodEditData.isNew ?? false,
+                            ),
+                          };
+                          setProducts((prev) =>
+                            prev.map((p) =>
+                              p.id === editingProdId
+                                ? {
+                                    ...p,
+                                    name: String(updates.name ?? p.name),
+                                    price: Number(updates.price),
+                                    type: String(updates.category ?? p.type),
+                                    sizes:
+                                      typeof prodEditData.sizes === "string"
+                                        ? prodEditData.sizes
+                                            .split(",")
+                                            .map((s: string) => s.trim())
+                                            .filter(Boolean)
+                                        : Array.isArray(prodEditData.sizes)
+                                          ? prodEditData.sizes.map((s) => String(s))
+                                          : p.sizes,
+                                    colors:
+                                      (prodEditData.colors as ProductColor[]) ?? p.colors,
+                                    isNew: updates.is_new,
+                                  }
+                                : p,
+                            ),
                           );
-                          persistProducts(updated);
-                          await saveProducts(updated);
+                          const res = await fetch("/api/products", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(updates),
+                          });
+                          const result = (await res.json()) as { ok?: boolean; error?: string };
+                          if (!result.ok) window.alert("Save failed: " + (result.error ?? "unknown"));
                           setEditingProdId(null);
                         }}
                         style={{
@@ -2019,6 +2075,9 @@ export default function AdminPage() {
               <h2 style={{ fontSize: 18, fontWeight: 900, textTransform: "uppercase" }}>Events</h2>
               <span style={{ fontSize: 10, color: "#aaa" }}>{events.filter((e) => e.visible).length} active</span>
             </div>
+            {eventsLoading ? (
+              <p style={{ fontSize: 11, color: "#aaa", marginBottom: 12 }}>Loading events…</p>
+            ) : null}
             {events.map((ev) => (
               <div key={ev.id} style={{ background: "#fff", border: "1px solid #e5e5e5", marginBottom: 16, overflow: "hidden" }}>
                 <div
@@ -2155,7 +2214,30 @@ export default function AdminPage() {
                               // eslint-disable-next-line @typescript-eslint/no-explicit-any
                               setEvEditData((d: any) => ({ ...d, image_url: data.publicUrl }));
                               persistEvents(updated);
-                              void saveEvents(updated as unknown as Record<string, unknown>[]);
+                              const evSaved = updated.find((e) => e.id === evEditData.id);
+                              if (evSaved) {
+                                void fetch("/api/events", {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    id: evSaved.id,
+                                    type: evSaved.type,
+                                    title: evSaved.title,
+                                    subtitle: evSaved.subtitle,
+                                    date: evSaved.date,
+                                    price: evSaved.price,
+                                    spots_total: evSaved.spotsTotal,
+                                    spots_left: evSaved.spotsLeft,
+                                    description: evSaved.description,
+                                    image_url: evSaved.image_url,
+                                    visible: evSaved.visible,
+                                  }),
+                                }).then(async (r) => {
+                                  const result = (await r.json()) as { ok?: boolean; error?: string };
+                                  if (!result.ok)
+                                    window.alert("Save failed: " + (result.error ?? "unknown"));
+                                });
+                              }
                             }
                           }}
                         />
@@ -2286,7 +2368,7 @@ export default function AdminPage() {
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         type="button"
-                        onClick={() => saveEvent({ ...ev, ...evEditData } as EventRow)}
+                        onClick={() => void saveEvent({ ...ev, ...evEditData } as EventRow)}
                         style={{
                           flex: 1,
                           padding: 12,

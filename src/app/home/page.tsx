@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { getEvents, submitTeamApplication } from "@/lib/db";
+import { submitTeamApplication } from "@/lib/db";
 
 type AppRouter = ReturnType<typeof useRouter>;
 
@@ -205,51 +205,45 @@ export default function HomePage() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
-      try {
-        const rows = await getEvents();
-        if (mounted && rows.length > 0) {
-          setEvents(rows as HcEvent[]);
-          setEventsReady(true);
-          return;
-        }
-      } catch {
-        /* ignore */
-      }
-      if (mounted) {
-        setEvents(DEFAULT_EVENTS);
-        setEventsReady(true);
-      }
-    };
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    const refresh = () => {
-      void getEvents()
-        .then((rows) => {
+    const load = () => {
+      fetch("/api/events")
+        .then((r) => r.json())
+        .then((data) => {
           if (!mounted) return;
-          if (rows.length > 0) {
-            setEvents(rows as HcEvent[]);
+          if (Array.isArray(data) && data.length > 0) {
+            setEvents(
+              data.map((ev: Record<string, unknown>) => ({
+                ...ev,
+                id: Number(ev.id),
+                type: String(ev.type ?? "dinner"),
+                title: String(ev.title ?? ""),
+                subtitle: String(ev.subtitle ?? ""),
+                date: String(ev.date ?? ""),
+                price: Number(ev.price ?? 0),
+                spotsTotal: Number(ev.spots_total ?? ev.spotsTotal ?? 30),
+                spotsLeft: Number(ev.spots_left ?? ev.spotsLeft ?? 30),
+                description: String(ev.description ?? ""),
+                image_url: (ev.image_url as string | null) ?? null,
+                visible: Boolean(ev.visible ?? true),
+              })) as HcEvent[],
+            );
           } else {
             setEvents(DEFAULT_EVENTS);
           }
         })
         .catch(() => {
           if (mounted) setEvents(DEFAULT_EVENTS);
+        })
+        .finally(() => {
+          if (mounted) setEventsReady(true);
         });
     };
-    const onFocus = () => refresh();
+    load();
+    const onFocus = () => load();
     window.addEventListener("focus", onFocus);
-    window.addEventListener("honor-local-storage", refresh);
     return () => {
       mounted = false;
       window.removeEventListener("focus", onFocus);
-      window.removeEventListener("honor-local-storage", refresh);
     };
   }, []);
 

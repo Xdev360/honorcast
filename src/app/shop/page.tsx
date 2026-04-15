@@ -1,14 +1,47 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { ProductCard } from "@/components/ProductCard";
 import {
-  loadProducts,
+  parseStoredProduct,
+  DEFAULT_COLORS,
   type Product,
-  DEFAULT_PRODUCTS,
 } from "@/lib/products";
+
+const FALLBACK_PRODUCTS: Record<string, unknown>[] = [
+  { id: 1, name: "Resolve Tee", category: "tops", price: 48, sizes: "XS,S,M,L,XL", is_new: true, colors: [] },
+  { id: 2, name: "Honor Short", category: "bottoms", price: 62, sizes: "S,M,L,XL", is_new: false, colors: [] },
+  { id: 3, name: "Culture Hoodie", category: "outerwear", price: 95, sizes: "XS,S,M,L,XL,XXL", is_new: true, colors: [] },
+  { id: 4, name: "Mind Jogger", category: "bottoms", price: 78, sizes: "S,M,L,XL", is_new: false, colors: [] },
+  { id: 5, name: "Conflict Vest", category: "tops", price: 52, sizes: "S,M,L,XL", is_new: true, colors: [] },
+  { id: 6, name: "Legacy Set", category: "sets", price: 135, sizes: "S,M,L", is_new: false, colors: [] },
+  { id: 7, name: "Spirit Track Top", category: "outerwear", price: 88, sizes: "S,M,L,XL", is_new: true, colors: [] },
+  { id: 8, name: "Forge Legging", category: "bottoms", price: 72, sizes: "XS,S,M,L,XL", is_new: false, colors: [] },
+];
+
+function normalizeProduct(raw: Record<string, unknown>): Product {
+  const parsed = parseStoredProduct(raw);
+  if (parsed) return parsed;
+  return {
+    id: Number(raw.id),
+    name: String(raw.name ?? ""),
+    type: String(raw.category ?? raw.type ?? "tops"),
+    price: Number(raw.price ?? 0),
+    sizes:
+      typeof raw.sizes === "string"
+        ? raw.sizes.split(",").map((s: string) => s.trim()).filter(Boolean)
+        : Array.isArray(raw.sizes)
+          ? (raw.sizes as unknown[]).map(String)
+          : [],
+    colors: DEFAULT_COLORS.slice(0, 3).map((c) => ({
+      ...c,
+      images: [null, null, null, null] as (string | null)[],
+    })),
+    isNew: Boolean(raw.is_new ?? raw.isNew ?? false),
+  };
+}
 
 function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
@@ -136,8 +169,6 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-// Products loaded from localStorage (admin edits live here)
-
 function generateOrderId() {
   const s = () =>
     Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -145,7 +176,7 @@ function generateOrderId() {
 }
 
 export default function ShopPage() {
-  const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS);
+  const [products, setProducts] = useState<Record<string, unknown>[]>([]);
   const [cart, setCart] = useState<{ id: number; size: string }[]>([]);
   const [sizes, setSizes] = useState<Record<number, string>>({});
   const [category, setCategory] = useState("all");
@@ -158,9 +189,17 @@ export default function ShopPage() {
   useEffect(() => {
     let mounted = true;
     const refresh = () => {
-      void loadProducts().then((next) => {
-        if (mounted) setProducts(next);
-      });
+      fetch("/api/products")
+        .then((r) => r.json())
+        .then((data) => {
+          if (!mounted) return;
+          if (Array.isArray(data) && data.length > 0) {
+            setProducts(data as Record<string, unknown>[]);
+          }
+        })
+        .catch(() => {
+          if (mounted) setProducts(FALLBACK_PRODUCTS);
+        });
     };
     refresh();
     const onFocus = () => {
@@ -173,17 +212,22 @@ export default function ShopPage() {
     };
   }, []);
 
+  const productList = useMemo(
+    () => products.map((raw) => normalizeProduct(raw)),
+    [products],
+  );
+
   const filtered =
     category === "all"
-      ? products
-      : products.filter((p) => p.type === category);
+      ? productList
+      : productList.filter((p) => p.type === category);
   const inCart = (id: number) => !!cart.find((c) => c.id === id);
   const maxed = cart.length >= 2;
 
   const downloadInvoice = async () => {
     setDownloading(true);
     const cartItems = cart.map((c) => {
-      const p = products.find((pr) => pr.id === c.id)!;
+      const p = productList.find((pr) => pr.id === c.id)!;
       return { ...p, selectedSize: c.size };
     });
     let finalOrderId = orderId;
