@@ -198,7 +198,7 @@ function parseStoredProduct(raw: unknown): Product | null {
 export function loadProducts(): Product[] {
   if (typeof window === "undefined") return DEFAULT_PRODUCTS;
   try {
-    const s = localStorage.getItem("hc_products_v2");
+    const s = localStorage.getItem("hc_products");
     if (s) {
       const parsed = JSON.parse(s) as unknown;
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -210,15 +210,6 @@ export function loadProducts(): Product[] {
         if (out.length) return out;
       }
     }
-    const legacy = localStorage.getItem("hc_products");
-    if (legacy) {
-      const arr = JSON.parse(legacy) as unknown;
-      if (Array.isArray(arr) && arr.length > 0) {
-        return arr.map((item) =>
-          migrateLegacyProductRow(item as Record<string, unknown>),
-        );
-      }
-    }
   } catch {
     /* ignore */
   }
@@ -227,5 +218,5 @@ export function loadProducts(): Product[] {
 
 export function saveProducts(products: Product[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem("hc_products_v2", JSON.stringify(products));
+  localStorage.setItem("hc_products", JSON.stringify(products));
 }

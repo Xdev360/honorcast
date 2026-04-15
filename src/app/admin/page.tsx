@@ -1740,34 +1740,26 @@ export default function AdminPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (editingProdId == null) return;
-                          const base = products.find((x) => x.id === editingProdId);
-                          if (!base) return;
-                          const sizeStr = String(prodEditData.sizes ?? "");
-                          const sizeList = sizeStr
-                            .split(/[,]+/)
-                            .map((s) => s.trim())
-                            .filter(Boolean);
-                          const cols = (prodEditData.colors as ProductColor[]) ?? base.colors;
-                          const normalized: ProductColor[] = cols.map((c) => ({
-                            ...c,
-                            images: [0, 1, 2, 3].map((i) => c.images?.[i] ?? null),
-                          }));
-                          const updated: Product[] = products.map((x) =>
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          const updated = products.map((x: any) =>
                             x.id === editingProdId
                               ? {
                                   ...x,
-                                  name: String(prodEditData.name ?? x.name),
+                                  name: prodEditData.name,
                                   price: Number(prodEditData.price),
-                                  type: String(prodEditData.category ?? x.type),
-                                  sizes: sizeList.length ? sizeList : x.sizes,
-                                  colors: normalized,
-                                  isNew: x.isNew,
+                                  category: prodEditData.category,
+                                  sizes:
+                                    typeof prodEditData.sizes === "string"
+                                      ? prodEditData.sizes
+                                          .split(",")
+                                          .map((s: string) => s.trim())
+                                      : prodEditData.sizes,
+                                  colors: prodEditData.colors,
                                 }
                               : x,
                           );
-                          persistProducts(updated);
-                          saveProducts(updated);
+                          persistProducts(updated);   // writes to hc_products
+                          saveProducts(updated);      // also writes to hc_products (same key now)
                           setEditingProdId(null);
                         }}
                         style={{

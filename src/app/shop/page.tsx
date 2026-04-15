@@ -156,26 +156,14 @@ export default function ShopPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const reload = () => setProducts(loadProducts());
-    reload();
+    setProducts(loadProducts());
+
+    // Re-sync if admin saves from another tab
     const onStorage = (e: StorageEvent) => {
-      if (
-        e.key === "hc_products_v2" ||
-        e.key === "hc_products" ||
-        e.key === null
-      ) {
-        reload();
-      }
+      if (e.key === "hc_products") setProducts(loadProducts());
     };
-    const onHonorLocal = () => reload();
     window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", reload);
-    window.addEventListener("honor-local-storage", onHonorLocal);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", reload);
-      window.removeEventListener("honor-local-storage", onHonorLocal);
-    };
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const filtered =
