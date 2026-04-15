@@ -258,41 +258,33 @@ export async function saveProducts(products: Product[]): Promise<boolean> {
       null,
   }));
 
-  const legacyRows = products.map((p) => ({
-    id: p.id,
-    name: p.name,
-    category: p.type,
-    price: p.price,
-    sizes: p.sizes.join(","),
-    new: p.isNew,
-    image_url:
-      p.colors.flatMap((c) => c.images).find((u) => typeof u === "string") ??
-      null,
-  }));
-
   try {
-    const { error } = await supabase
-      .from("products")
-      .upsert(rows, { onConflict: "id" });
-
-    // Backward compatibility: if schema has no `colors` column, retry
-    // with legacy fields so saves still work until DB migration is applied.
-    if (error?.message?.includes("Could not find the 'colors' column")) {
-      const { error: legacyError } = await supabase
+    // Backward compatibility: some environments may still be missing newer
+    // columns (e.g. colors/new). Retry by removing unsupported columns one by one.
+    let candidateRows: Record<string, unknown>[] = rows.map((r) => ({ ...r }));
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const { error } = await supabase
         .from("products")
-        .upsert(legacyRows, { onConflict: "id" });
-      if (legacyError) {
-        console.error("Failed to save products:", legacyError.message);
+        .upsert(candidateRows, { onConflict: "id" });
+      if (!error) return true;
+
+      const match = error.message.match(/Could not find the '([^']+)' column/);
+      if (!match) {
+        console.error("Failed to save products:", error.message);
         return false;
       }
-      return true;
+      const missingColumn = match[1];
+      candidateRows = candidateRows.map((row) => {
+        const next = { ...row };
+        delete next[missingColumn];
+        return next;
+      });
     }
-
-    if (error) {
-      console.error("Failed to save products:", error.message);
-      return false;
-    }
-    return true;
+    console.error(
+      "Failed to save products:",
+      "Exceeded retry attempts while adapting to schema columns.",
+    );
+    return false;
   } catch (e) {
     console.error("Failed to save products:", e);
     return false;

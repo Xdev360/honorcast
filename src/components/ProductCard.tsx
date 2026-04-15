@@ -26,13 +26,20 @@ export function ProductCard({
 
   const color = product.colors[colorIdx];
   const images = color?.images ?? [null, null, null, null];
-  const hasAnyImage = images.some(Boolean);
+  const uploadedImages = images.filter(
+    (img): img is string => typeof img === "string" && img.length > 0,
+  );
+  const hasAnyImage = uploadedImages.length > 0;
+  const currentImage = hasAnyImage
+    ? uploadedImages[imageIdx % uploadedImages.length]
+    : null;
 
   const goImg = (dir: 1 | -1) => {
+    if (uploadedImages.length <= 1) return;
     setImageIdx((i) => {
       const next = i + dir;
-      if (next < 0) return images.length - 1;
-      if (next >= images.length) return 0;
+      if (next < 0) return uploadedImages.length - 1;
+      if (next >= uploadedImages.length) return 0;
       return next;
     });
   };
@@ -83,10 +90,10 @@ export function ProductCard({
             transition={{ duration: 0.18 }}
             className="absolute inset-0"
           >
-            {images[imageIdx] ? (
+            {currentImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={images[imageIdx]!}
+                src={currentImage}
                 alt={product.name}
                 className="h-full w-full object-cover"
               />
@@ -117,7 +124,7 @@ export function ProductCard({
 
         {hasAnyImage && (
           <div className="pointer-events-none absolute bottom-2 left-0 right-0 flex justify-center gap-1">
-            {images.map((_, i) => (
+            {uploadedImages.map((_, i) => (
               <div
                 key={i}
                 className="h-1 w-1 rounded-full transition-all"
@@ -129,7 +136,7 @@ export function ProductCard({
           </div>
         )}
 
-        {hasAnyImage && images.filter(Boolean).length > 1 && (
+        {hasAnyImage && uploadedImages.length > 1 && (
           <>
             <button
               type="button"
