@@ -8,6 +8,7 @@ import {
   loadProducts,
   uploadProductImage,
   saveProducts,
+  cacheProducts,
   type Product,
   type ProductColor,
   DEFAULT_PRODUCTS,
@@ -1006,13 +1007,19 @@ export default function AdminPage() {
   const [eventSaved, setEventSaved] = useState<number | null>(null);
 
   useEffect(() => {
+    let mounted = true;
     try {
       const evs = localStorage.getItem("hc_events");
       if (evs) setEvents(JSON.parse(evs) as EventRow[]);
-      setProducts(loadProducts());
     } catch {
       /* ignore */
     }
+    void loadProducts().then((next) => {
+      if (mounted) setProducts(next);
+    });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -1032,7 +1039,7 @@ export default function AdminPage() {
   };
   const persistProducts = (updated: Product[]) => {
     setProducts(updated);
-    localStorage.setItem("hc_products", JSON.stringify(updated));
+    cacheProducts(updated);
     notifyHonorLocalStorage();
   };
 
@@ -1765,27 +1772,29 @@ export default function AdminPage() {
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
                         type="button"
-                        onClick={() => {
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          const updated = products.map((x: any) =>
+                        onClick={async () => {
+                          const updated = products.map((x) =>
                             x.id === editingProdId
                               ? {
                                   ...x,
-                                  name: prodEditData.name,
+                                  name: String(prodEditData.name ?? x.name),
                                   price: Number(prodEditData.price),
-                                  category: prodEditData.category,
+                                  type: String(prodEditData.category ?? x.type),
                                   sizes:
                                     typeof prodEditData.sizes === "string"
                                       ? prodEditData.sizes
                                           .split(",")
                                           .map((s: string) => s.trim())
-                                      : prodEditData.sizes,
-                                  colors: prodEditData.colors,
+                                          .filter(Boolean)
+                                      : Array.isArray(prodEditData.sizes)
+                                        ? prodEditData.sizes.map((s) => String(s))
+                                        : x.sizes,
+                                  colors: (prodEditData.colors as ProductColor[]) ?? x.colors,
                                 }
                               : x,
                           );
-                          persistProducts(updated);   // writes to hc_products
-                          saveProducts(updated);      // also writes to hc_products (same key now)
+                          persistProducts(updated);
+                          await saveProducts(updated);
                           setEditingProdId(null);
                         }}
                         style={{

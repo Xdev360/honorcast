@@ -156,14 +156,31 @@ export default function ShopPage() {
   const router = useRouter();
 
   useEffect(() => {
-    setProducts(loadProducts());
+    let mounted = true;
+    void loadProducts().then((next) => {
+      if (mounted) setProducts(next);
+    });
 
     // Re-sync if admin saves from another tab
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "hc_products") setProducts(loadProducts());
+      if (e.key === "hc_products") {
+        void loadProducts().then((next) => {
+          if (mounted) setProducts(next);
+        });
+      }
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    const onFocus = () => {
+      void loadProducts().then((next) => {
+        if (mounted) setProducts(next);
+      });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   const filtered =

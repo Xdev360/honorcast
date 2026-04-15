@@ -197,7 +197,7 @@ function parseStoredProduct(raw: unknown): Product | null {
   return migrateLegacyProductRow(r);
 }
 
-export function loadProducts(): Product[] {
+function readLocalProducts(): Product[] {
   if (typeof window === "undefined") return DEFAULT_PRODUCTS;
   try {
     const s = localStorage.getItem("hc_products");
@@ -218,7 +218,62 @@ export function loadProducts(): Product[] {
   return DEFAULT_PRODUCTS;
 }
 
-export function saveProducts(products: Product[]) {
+export async function loadProducts(): Promise<Product[]> {
+  try {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("id");
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const normalized = data
+        .map((row) => parseStoredProduct(row as Record<string, unknown>))
+        .filter((p): p is Product => p != null);
+      if (normalized.length === 0) return readLocalProducts();
+      if (typeof window !== "undefined") {
+        localStorage.setItem("hc_products", JSON.stringify(normalized));
+      }
+      return normalized;
+    }
+  } catch {
+    /* ignore */
+  }
+  return readLocalProducts();
+}
+
+export async function saveProducts(products: Product[]): Promise<boolean> {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("hc_products", JSON.stringify(products));
+  }
+
+  const rows = products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    category: p.type,
+    price: p.price,
+    sizes: p.sizes.join(","),
+    new: p.isNew,
+    colors: p.colors,
+    image_url:
+      p.colors.flatMap((c) => c.images).find((u) => typeof u === "string") ??
+      null,
+  }));
+
+  try {
+    const { error } = await supabase
+      .from("products")
+      .upsert(rows, { onConflict: "id" });
+    if (error) {
+      console.error("Failed to save products:", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("Failed to save products:", e);
+    return false;
+  }
+}
+
+export function cacheProducts(products: Product[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem("hc_products", JSON.stringify(products));
 }
