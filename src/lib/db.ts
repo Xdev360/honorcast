@@ -60,6 +60,13 @@ export async function getEvents() {
   return data ?? [];
 }
 
+export async function saveEvents(events: Record<string, unknown>[]) {
+  const { error } = await supabase
+    .from("events")
+    .upsert(events, { onConflict: "id" });
+  return !error;
+}
+
 export async function updateEvent(
   id: number,
   updates: Record<string, unknown>,

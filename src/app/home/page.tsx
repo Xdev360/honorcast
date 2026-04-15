@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { submitTeamApplication } from "@/lib/db";
+import { getEvents, submitTeamApplication } from "@/lib/db";
 
 type AppRouter = ReturnType<typeof useRouter>;
 
@@ -204,21 +204,44 @@ export default function HomePage() {
   const [eventsReady, setEventsReady] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("hc_events");
-      if (stored) {
-        const parsed = JSON.parse(stored) as HcEvent[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setEvents(parsed);
+    let mounted = true;
+    const load = async () => {
+      try {
+        const rows = await getEvents();
+        if (mounted && rows.length > 0) {
+          const fromDb = rows as HcEvent[];
+          setEvents(fromDb);
+          localStorage.setItem("hc_events", JSON.stringify(fromDb));
           setEventsReady(true);
           return;
         }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
-    }
-    setEvents(DEFAULT_EVENTS);
-    setEventsReady(true);
+      try {
+        const stored = localStorage.getItem("hc_events");
+        if (stored) {
+          const parsed = JSON.parse(stored) as HcEvent[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            if (mounted) {
+              setEvents(parsed);
+              setEventsReady(true);
+            }
+            return;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      if (mounted) {
+        setEvents(DEFAULT_EVENTS);
+        setEventsReady(true);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {

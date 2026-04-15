@@ -4,6 +4,7 @@ import { useState, useEffect, type CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { notifyHonorLocalStorage } from "@/lib/hc-form-sync";
 import { supabase } from "@/lib/supabase";
+import { getEvents, saveEvents } from "@/lib/db";
 import {
   loadProducts,
   uploadProductImage,
@@ -1008,9 +1009,27 @@ export default function AdminPage() {
 
   useEffect(() => {
     let mounted = true;
+    const loadEventRows = async () => {
+      try {
+        const rows = await getEvents();
+        if (mounted && rows.length > 0) {
+          const evRows = rows as EventRow[];
+          setEvents(evRows);
+          localStorage.setItem("hc_events", JSON.stringify(evRows));
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const evs = localStorage.getItem("hc_events");
+        if (evs && mounted) setEvents(JSON.parse(evs) as EventRow[]);
+      } catch {
+        /* ignore */
+      }
+    };
     try {
-      const evs = localStorage.getItem("hc_events");
-      if (evs) setEvents(JSON.parse(evs) as EventRow[]);
+      void loadEventRows();
     } catch {
       /* ignore */
     }
@@ -1063,7 +1082,9 @@ export default function AdminPage() {
   };
 
   const saveEvent = (ev: EventRow) => {
-    persistEvents(events.map((e) => (e.id === ev.id ? ev : e)));
+    const updated = events.map((e) => (e.id === ev.id ? ev : e));
+    persistEvents(updated);
+    void saveEvents(updated as unknown as Record<string, unknown>[]);
     setEditingEvId(null);
     setEventSaved(ev.id);
     window.setTimeout(() => setEventSaved(null), 2500);
@@ -2043,6 +2064,7 @@ export default function AdminPage() {
                               // eslint-disable-next-line @typescript-eslint/no-explicit-any
                               setEvEditData((d: any) => ({ ...d, image_url: data.publicUrl }));
                               persistEvents(updated);
+                              void saveEvents(updated as unknown as Record<string, unknown>[]);
                             }
                           }}
                         />
