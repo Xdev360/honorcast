@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CryptoPayment } from "@/components/CryptoPayment";
 
 type ApiEvent = {
   id?: number;
@@ -70,9 +71,9 @@ export default function DinnerPage() {
   const router = useRouter();
   const [ev, setEv] = useState<ApiEvent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [booked, setBooked] = useState(false);
   const [qty, setQty] = useState(1);
   const [form, setForm] = useState({ name: "", email: "", instagram: "" });
+  const [cryptoOpen, setCryptoOpen] = useState(false);
   const t = useCountdown(ev?.date ?? "2026-06-21T19:00");
 
   useEffect(() => {
@@ -228,26 +229,6 @@ export default function DinnerPage() {
               <p className="text-[14px] font-black uppercase">Sold Out</p>
               <p className="mt-2 text-[12px] text-gray-400">All seats have been claimed.</p>
             </div>
-          ) : booked ? (
-            <div className="border-2 border-black p-6 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border-2 border-black">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M5 13l4 4L19 7"
-                    stroke="#000"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-              <h3 className="mb-2 text-[16px] font-black uppercase tracking-tight">
-                Booking Request Received
-              </h3>
-              <p className="text-[12px] leading-relaxed text-gray-500">
-                We will reach out within 24 hours to confirm your seat. Check your DMs @h0n0rculture.
-              </p>
-            </div>
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between border border-gray-200 p-4">
@@ -304,23 +285,13 @@ export default function DinnerPage() {
               </div>
               <button
                 type="button"
-                onClick={async () => {
+                onClick={() => {
                   if (!form.name || !form.email) return;
-                  await fetch("/api/event-bookings", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      event_type: "dinner",
-                      ...form,
-                      qty,
-                      event_id: ev?.id,
-                    }),
-                  });
-                  setBooked(true);
+                  setCryptoOpen(true);
                 }}
                 className="w-full bg-black py-4 text-[11px] font-black uppercase tracking-[.18em] text-white"
               >
-                Request My Seat →
+                Proceed to Payment →
               </button>
               <p className="mt-3 text-center text-[10px] leading-relaxed text-gray-400">
                 Requesting places you in the confirmation queue. Payment details sent after we confirm.
@@ -329,6 +300,17 @@ export default function DinnerPage() {
           )}
         </div>
       </div>
+      <CryptoPayment
+        open={cryptoOpen}
+        onClose={() => setCryptoOpen(false)}
+        amountUsd={(ev?.price ?? 500) * qty}
+        itemLabel={`Private Dinner Ticket × ${qty}`}
+        type="dinner"
+        orderDetails={{ event_id: ev?.id, qty, date: ev?.date }}
+        customerName={form.name}
+        customerEmail={form.email}
+        customerInstagram={form.instagram}
+      />
     </main>
   );
 }

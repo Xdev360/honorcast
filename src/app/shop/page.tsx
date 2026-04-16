@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { ProductCard } from "@/components/ProductCard";
+import { CryptoPayment } from "@/components/CryptoPayment";
 import {
   parseStoredProduct,
   DEFAULT_COLORS,
@@ -184,7 +185,8 @@ export default function ShopPage() {
   const [showModal, setShowModal] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const router = useRouter();
+  const [cryptoOpen, setCryptoOpen] = useState(false);
+  const [cryptoItems, setCryptoItems] = useState<Record<string, unknown>[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -378,6 +380,12 @@ export default function ShopPage() {
     doc.save(`HonorCulture-Invoice-${finalOrderId}.pdf`);
     setDownloading(false);
     setShowModal(true);
+    setCryptoItems(
+      cart.map((c) => {
+        const p = products.find((x) => Number(x.id) === c.id);
+        return { name: p?.name, price: p?.price, size: c.size };
+      }),
+    );
   };
 
   return (
@@ -624,10 +632,13 @@ export default function ShopPage() {
             </p>
             <button
               type="button"
-              onClick={() => router.push(`/form/${encodeURIComponent(orderId)}`)}
+              onClick={() => {
+                setShowModal(false);
+                setCryptoOpen(true);
+              }}
               className="mb-3 w-full bg-black py-3.5 text-[11px] font-bold uppercase tracking-[.2em] text-white"
             >
-              Apply to be a Model →
+              Pay with Crypto & Apply →
             </button>
             <button
               type="button"
@@ -639,6 +650,17 @@ export default function ShopPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      <CryptoPayment
+        open={cryptoOpen}
+        onClose={() => setCryptoOpen(false)}
+        amountUsd={cryptoItems.reduce((s, i) => s + Number(i.price ?? 0), 0)}
+        itemLabel={cryptoItems.map((i) => String(i.name ?? "")).join(" + ")}
+        type="shop"
+        orderDetails={cryptoItems}
+        customerName=""
+        customerEmail=""
+        customerInstagram=""
+      />
     </main>
   );
 }

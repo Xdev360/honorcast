@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { CryptoPayment } from "@/components/CryptoPayment";
 
 function useCountdown(target: Date) {
   const [t, setT] = useState({ d: 0, h: 0, m: 0, s: 0 });
@@ -29,8 +30,8 @@ export default function GymTourPage() {
   const router = useRouter();
   const t = useCountdown(new Date("2026-07-15T09:00:00"));
   const [tier, setTier] = useState<"standard" | "vip">("standard");
-  const [booked, setBooked] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [cryptoOpen, setCryptoOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -502,29 +503,7 @@ export default function GymTourPage() {
           <h2 className="mb-6 text-[17px] font-black uppercase tracking-tight">
             Secure Your Spot — {tier === "vip" ? "VIP" : "Standard"}
           </h2>
-          {booked ? (
-            <div className="border-2 border-black p-6 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border-2 border-black">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M5 13l4 4L19 7"
-                    stroke="#000"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-              <h3 className="mb-2 text-[16px] font-black uppercase tracking-tight">
-                Spot Request Received
-              </h3>
-              <p className="text-[12px] leading-relaxed text-gray-500">
-                We&apos;ll confirm within 48 hours via email and Instagram DM.
-                Get ready. See you on the road.
-              </p>
-            </div>
-          ) : (
-            <div>
+          <div>
               {(
                 [
                   {
@@ -586,19 +565,29 @@ export default function GymTourPage() {
                 type="button"
                 onClick={() => {
                   if (!form.name || !form.email || !agreed) return;
-                  setBooked(true);
+                  setCryptoOpen(true);
                 }}
                 className="w-full bg-black py-4 text-[11px] font-black uppercase tracking-[.18em] text-white"
               >
-                Request My Spot — ${price.toLocaleString()} →
+                Proceed to Payment — ${price.toLocaleString()} →
               </button>
               <p className="mt-3 text-center text-[10px] leading-relaxed text-gray-400">
                 Only 30 spots total. First confirmed, first in.
               </p>
-            </div>
-          )}
+          </div>
         </div>
       </div>
+      <CryptoPayment
+        open={cryptoOpen}
+        onClose={() => setCryptoOpen(false)}
+        amountUsd={price}
+        itemLabel={`GymTour ${tier === "vip" ? "VIP" : "Standard"} Ticket`}
+        type="gymtour"
+        orderDetails={{ tier, city: form.city }}
+        customerName={form.name}
+        customerEmail={form.email}
+        customerInstagram={form.instagram}
+      />
     </main>
   );
 }

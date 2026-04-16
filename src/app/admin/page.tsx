@@ -1152,6 +1152,11 @@ export default function AdminPage() {
   const [eventSaved, setEventSaved] = useState<number | null>(null);
   const [productsLoading, setProductsLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
+  const [payments, setPayments] = useState<Record<string, unknown>[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
+  const [cryptoSettings, setCryptoSettings] = useState<Record<string, unknown>>({});
+  const [cryptoSaved, setCryptoSaved] = useState(false);
+  const [qrUploading, setQrUploading] = useState(false);
 
   useEffect(() => {
     if (!authed) return;
@@ -1215,6 +1220,25 @@ export default function AdminPage() {
       .then((data) => setApps(Array.isArray(data) ? data : []))
       .catch(() => setApps([]))
       .finally(() => setAppsLoading(false));
+  }, [authed]);
+
+  useEffect(() => {
+    if (!authed) return;
+    setPaymentsLoading(true);
+    fetch("/api/crypto-payments")
+      .then((r) => r.json())
+      .then((d) => {
+        setPayments(Array.isArray(d) ? (d as Record<string, unknown>[]) : []);
+        setPaymentsLoading(false);
+      })
+      .catch(() => {
+        setPayments([]);
+        setPaymentsLoading(false);
+      });
+    fetch("/api/crypto-settings")
+      .then((r) => r.json())
+      .then((d) => setCryptoSettings((d as Record<string, unknown>) ?? {}))
+      .catch(() => setCryptoSettings({}));
   }, [authed]);
 
   const persistEvents = (updated: EventRow[]) => {
@@ -1410,6 +1434,7 @@ export default function AdminPage() {
     },
     { id: "products", label: "Products" },
     { id: "events", label: "Events" },
+    { id: "payments", label: "Payments", badge: 0 },
     { id: "formbuilder", label: "Form Builder" },
     { id: "downloads", label: "Downloads" },
     { id: "settings", label: "Settings" },
@@ -2666,6 +2691,327 @@ export default function AdminPage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {tab === "payments" && (
+          <div>
+            <div style={{ background: "#fff", border: "1px solid #e5e5e5", padding: 20, marginBottom: 20 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: ".12em",
+                  textTransform: "uppercase",
+                  marginBottom: 16,
+                  paddingBottom: 10,
+                  borderBottom: "1px solid #f0f0f0",
+                }}
+              >
+                Crypto Wallet Settings
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <span style={S.lbl}>Wallet Label (e.g. Bitcoin (BTC))</span>
+                <input
+                  value={String(cryptoSettings.wallet_label ?? "")}
+                  onChange={(e) => setCryptoSettings((s) => ({ ...s, wallet_label: e.target.value }))}
+                  style={S.inp}
+                  placeholder="Bitcoin (BTC)"
+                />
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <span style={S.lbl}>Wallet Address</span>
+                <input
+                  value={String(cryptoSettings.wallet_address ?? "")}
+                  onChange={(e) => setCryptoSettings((s) => ({ ...s, wallet_address: e.target.value }))}
+                  style={S.inp}
+                  placeholder="bc1q..."
+                />
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <span style={S.lbl}>Payment Note (shown to customers before payment)</span>
+                <textarea
+                  value={String(cryptoSettings.payment_note ?? "")}
+                  onChange={(e) => setCryptoSettings((s) => ({ ...s, payment_note: e.target.value }))}
+                  rows={4}
+                  style={{ ...S.inp, resize: "vertical" } as CSSProperties}
+                />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <span style={S.lbl}>QR Code Image</span>
+                {cryptoSettings.qr_code_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={String(cryptoSettings.qr_code_url)}
+                    alt="QR"
+                    style={{ width: 100, height: 100, objectFit: "cover", marginBottom: 8, border: "1px solid #e5e5e5" }}
+                  />
+                ) : null}
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: "2px dashed #ddd",
+                    padding: 14,
+                    cursor: "pointer",
+                    gap: 6,
+                    minHeight: 60,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: "#aaa",
+                      textTransform: "uppercase",
+                      letterSpacing: ".08em",
+                    }}
+                  >
+                    {qrUploading
+                      ? "Uploading..."
+                      : cryptoSettings.qr_code_url
+                        ? "Replace QR Code"
+                        : "Upload QR Code"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={async (e) => {
+                      if (!e.target.files?.[0]) return;
+                      setQrUploading(true);
+                      const file = e.target.files[0];
+                      const ext = file.name.split(".").pop();
+                      const path = `qr/wallet-qr.${ext}`;
+                      const { supabase: sb } = await import("@/lib/supabase");
+                      const { error } = await sb.storage.from("honorculture").upload(path, file, { upsert: true });
+                      if (!error) {
+                        const { data } = sb.storage.from("honorculture").getPublicUrl(path);
+                        setCryptoSettings((s) => ({ ...s, qr_code_url: data.publicUrl }));
+                      }
+                      setQrUploading(false);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await fetch("/api/crypto-settings", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(cryptoSettings),
+                  });
+                  setCryptoSaved(true);
+                  window.setTimeout(() => setCryptoSaved(false), 2000);
+                }}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  background: cryptoSaved ? "#16a34a" : "#000",
+                  color: "#fff",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: ".15em",
+                  textTransform: "uppercase",
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "background .3s",
+                }}
+              >
+                {cryptoSaved ? "Saved ✓" : "Save Wallet Settings"}
+              </button>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 900, textTransform: "uppercase" }}>Payment Requests</h2>
+              <span style={{ fontSize: 10, color: "#aaa" }}>
+                {payments.filter((p) => p.status === "awaiting_confirmation").length} pending
+              </span>
+            </div>
+
+            {paymentsLoading ? (
+              <div style={{ textAlign: "center", padding: "30px 20px", color: "#aaa", fontSize: 12 }}>Loading...</div>
+            ) : null}
+
+            {!paymentsLoading && payments.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "30px 20px", border: "1px dashed #e5e5e5" }}>
+                <p style={{ fontSize: 12, color: "#aaa" }}>No payment requests yet.</p>
+              </div>
+            ) : null}
+
+            {!paymentsLoading &&
+              payments.map((pmt) => {
+                const isPending = pmt.status === "awaiting_confirmation";
+                const isConfirmed = pmt.status === "confirmed";
+                const isRejected = pmt.status === "rejected";
+                const statusColor = isConfirmed ? "#16a34a" : isRejected ? "#dc2626" : "#d97706";
+                const statusBg = isConfirmed ? "#f0fdf4" : isRejected ? "#fef2f2" : "#fffbeb";
+
+                return (
+                  <div key={String(pmt.id)} style={{ background: "#fff", border: "1px solid #e5e5e5", marginBottom: 12, overflow: "hidden" }}>
+                    <div
+                      style={{
+                        padding: "12px 14px",
+                        borderBottom: "1px solid #f0f0f0",
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 2 }}>
+                          {String(pmt.customer_name || "Unknown")}
+                        </div>
+                        <div style={{ fontSize: 10, color: "#888" }}>
+                          {String(pmt.customer_email ?? "")} · {String(pmt.customer_instagram ?? "")}
+                        </div>
+                        <div style={{ fontSize: 10, color: "#bbb", marginTop: 1 }}>
+                          {pmt.submitted_at
+                            ? new Date(String(pmt.submitted_at)).toLocaleString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                                hour12: true,
+                              })
+                            : ""}
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 8,
+                          fontWeight: 700,
+                          letterSpacing: ".08em",
+                          textTransform: "uppercase",
+                          padding: "3px 8px",
+                          background: statusBg,
+                          color: statusColor,
+                          border: `1px solid ${statusColor}30`,
+                          borderRadius: 2,
+                        }}
+                      >
+                        {String(pmt.status ?? "")}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "#e5e5e5" }}>
+                      {(
+                        [
+                          ["Amount", `$${String(pmt.amount_usd ?? "")}`],
+                          ["Type", String(pmt.type ?? "")],
+                          ["Item", String(pmt.item_label ?? "")],
+                          ["Gmail", String(pmt.customer_gmail ?? "—")],
+                        ] as const
+                      ).map(([k, v]) => (
+                        <div key={k} style={{ background: "#fff", padding: "8px 10px" }}>
+                          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#aaa", marginBottom: 1 }}>
+                            {k}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 700 }}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "6px 14px",
+                        fontFamily: "monospace",
+                        fontSize: 9,
+                        color: "#aaa",
+                        background: "#f9f9f9",
+                        borderTop: "1px solid #f0f0f0",
+                      }}
+                    >
+                      {String(pmt.reference ?? "")}
+                    </div>
+
+                    {isPending ? (
+                      <div style={{ padding: "10px 14px", display: "flex", gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await fetch("/api/crypto-payments", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ reference: pmt.reference, status: "confirmed" }),
+                            });
+                            setPayments((prev) =>
+                              prev.map((p) =>
+                                p.reference === pmt.reference ? { ...p, status: "confirmed" } : p,
+                              ),
+                            );
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: "9px",
+                            border: "1.5px solid #16a34a",
+                            background: "#f0fdf4",
+                            color: "#16a34a",
+                            fontSize: 9,
+                            fontWeight: 700,
+                            letterSpacing: ".1em",
+                            textTransform: "uppercase",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ✓ Confirm Payment
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await fetch("/api/crypto-payments", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ reference: pmt.reference, status: "rejected" }),
+                            });
+                            setPayments((prev) =>
+                              prev.map((p) =>
+                                p.reference === pmt.reference ? { ...p, status: "rejected" } : p,
+                              ),
+                            );
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: "9px",
+                            border: "1.5px solid #dc2626",
+                            background: "#fef2f2",
+                            color: "#dc2626",
+                            fontSize: 9,
+                            fontWeight: 700,
+                            letterSpacing: ".1em",
+                            textTransform: "uppercase",
+                            cursor: "pointer",
+                          }}
+                        >
+                          ✕ Reject
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {isConfirmed ? (
+                      <div style={{ padding: "8px 14px", fontSize: 10, color: "#16a34a", fontWeight: 700, background: "#f0fdf4" }}>
+                        Payment confirmed
+                        {pmt.confirmed_at ? ` · ${new Date(String(pmt.confirmed_at)).toLocaleString()}` : ""}
+                      </div>
+                    ) : null}
+
+                    {isRejected ? (
+                      <div style={{ padding: "8px 14px", fontSize: 10, color: "#dc2626", fontWeight: 700, background: "#fef2f2" }}>
+                        Payment rejected
+                        {pmt.rejected_at ? ` · ${new Date(String(pmt.rejected_at)).toLocaleString()}` : ""}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
           </div>
         )}
 
