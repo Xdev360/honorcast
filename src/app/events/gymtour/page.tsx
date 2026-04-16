@@ -30,9 +30,8 @@ export default function GymTourPage() {
   const [ev, setEv] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [tier, setTier] = useState<"standard" | "vip">("standard");
-  const [agreed, setAgreed] = useState(false);
   const [cryptoOpen, setCryptoOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", instagram: "", city: "" });
+  const [form] = useState({ name: "", email: "", instagram: "", city: "" });
   const t = useCountdown(String(ev?.date ?? "2026-07-15T09:00"));
 
   useEffect(() => {
@@ -351,42 +350,9 @@ export default function GymTourPage() {
             </div>
           ) : (
             <>
-              {[
-                { label: "Full Name", key: "name", placeholder: "Your full name", type: "text" },
-                { label: "Email", key: "email", placeholder: "your@email.com", type: "email" },
-                { label: "Instagram Handle", key: "instagram", placeholder: "@yourhandle", type: "text" },
-                { label: "Home City & State", key: "city", placeholder: "e.g. Atlanta, GA", type: "text" },
-              ].map((f) => (
-                <div key={f.key} className="mb-4">
-                  <p className="mb-1.5 text-[9px] font-bold uppercase tracking-[.1em] text-gray-400">{f.label}</p>
-                  <input
-                    type={f.type}
-                    value={form[f.key as keyof typeof form]}
-                    onChange={(e) => setForm((d) => ({ ...d, [f.key]: e.target.value }))}
-                    placeholder={f.placeholder}
-                    className="w-full border-b border-black bg-transparent py-2 text-[13px] outline-none placeholder:text-gray-300"
-                  />
-                </div>
-              ))}
-
-              <label className="mb-6 flex cursor-pointer items-start gap-3 border border-gray-200 bg-gray-50 p-3">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="mt-0.5 flex-shrink-0"
-                />
-                <p className="text-[11px] leading-relaxed text-gray-600">
-                  I understand a <span className="font-black">$500 non-refundable deposit</span> is required to confirm my spot, and the full ${price.toLocaleString()} balance is due 30 days before the tour.
-                </p>
-              </label>
-
               <button
                 type="button"
-                onClick={() => {
-                  if (!form.name || !form.email || !agreed) return;
-                  setCryptoOpen(true);
-                }}
+                onClick={() => setCryptoOpen(true)}
                 className="w-full bg-black py-4 text-[11px] font-black uppercase tracking-[.18em] text-white"
               >
                 Proceed to Payment — ${price.toLocaleString()} →
