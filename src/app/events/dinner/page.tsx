@@ -72,7 +72,7 @@ export default function DinnerPage() {
   const [ev, setEv] = useState<ApiEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
-  const [form, setForm] = useState({ name: "", email: "", instagram: "" });
+  const [form] = useState({ name: "", email: "", instagram: "" });
   const [cryptoOpen, setCryptoOpen] = useState(false);
   const t = useCountdown(ev?.date ?? "2026-06-21T19:00");
 
@@ -240,26 +240,6 @@ export default function DinnerPage() {
                 </div>
                 <p className="text-[16px] font-black">${ev?.price ?? 500}</p>
               </div>
-              {(
-                [
-                  { label: "Full Name", key: "name" as const, type: "text" },
-                  { label: "Email", key: "email" as const, type: "email" },
-                  { label: "Instagram Handle", key: "instagram" as const, type: "text" },
-                ] as const
-              ).map((f) => (
-                <div key={f.key} className="mb-4">
-                  <p className="mb-1.5 text-[9px] font-bold uppercase tracking-[.1em] text-gray-400">
-                    {f.label}
-                  </p>
-                  <input
-                    type={f.type}
-                    value={form[f.key]}
-                    onChange={(e) => setForm((d) => ({ ...d, [f.key]: e.target.value }))}
-                    placeholder={f.label}
-                    className="w-full border-b border-black bg-transparent py-2 text-[13px] outline-none placeholder:text-gray-300"
-                  />
-                </div>
-              ))}
               <div className="mb-5 flex items-center gap-3">
                 <p className="text-[10px] font-bold uppercase tracking-[.08em] text-gray-500">Qty</p>
                 <div className="flex items-center gap-3 border border-gray-200 px-3 py-2">
@@ -285,10 +265,7 @@ export default function DinnerPage() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  if (!form.name || !form.email) return;
-                  setCryptoOpen(true);
-                }}
+                onClick={() => setCryptoOpen(true)}
                 className="w-full bg-black py-4 text-[11px] font-black uppercase tracking-[.18em] text-white"
               >
                 Proceed to Payment →
