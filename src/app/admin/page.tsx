@@ -1138,6 +1138,14 @@ export default function AdminPage() {
   const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS);
   const [editingProdId, setEditingProdId] = useState<number | null>(null);
   const [prodEditData, setProdEditData] = useState<Record<string, unknown>>({});
+  const [productCategories, setProductCategories] = useState([
+    "tops",
+    "bottoms",
+    "outerwear",
+    "sets",
+  ]);
+  const [newCatName, setNewCatName] = useState("");
+  const [addingProdCat, setAddingProdCat] = useState(false);
   const [events, setEvents] = useState<EventRow[]>([...INIT_EVENTS]);
   const [editingEvId, setEditingEvId] = useState<number | null>(null);
   const [evEditData, setEvEditData] = useState<Partial<EventRow>>({});
@@ -1677,6 +1685,84 @@ export default function AdminPage() {
             {productsLoading ? (
               <p style={{ fontSize: 11, color: "#aaa", marginBottom: 12 }}>Loading products…</p>
             ) : null}
+            <div style={{ background: "#fff", border: "1px solid #e5e5e5", padding: 16, marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase" }}>Categories</span>
+                <button
+                  type="button"
+                  onClick={() => setAddingProdCat(true)}
+                  style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", padding: "5px 10px", border: "1.5px solid #000", background: "#fff", cursor: "pointer", borderRadius: 2 }}
+                >
+                  + Add
+                </button>
+              </div>
+
+              {addingProdCat ? (
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <input
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newCatName.trim()) {
+                        const slug = newCatName.trim().toLowerCase().replace(/\s+/g, "-");
+                        if (!productCategories.includes(slug)) {
+                          setProductCategories((prev) => [...prev, slug]);
+                        }
+                        setNewCatName("");
+                        setAddingProdCat(false);
+                      }
+                    }}
+                    placeholder="Category name e.g. Accessories"
+                    autoFocus
+                    style={{ flex: 1, border: "none", borderBottom: "1.5px solid #000", padding: "6px 0", fontSize: 13, outline: "none", background: "transparent" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newCatName.trim()) return;
+                      const slug = newCatName.trim().toLowerCase().replace(/\s+/g, "-");
+                      if (!productCategories.includes(slug)) {
+                        setProductCategories((prev) => [...prev, slug]);
+                      }
+                      setNewCatName("");
+                      setAddingProdCat(false);
+                    }}
+                    style={{ padding: "6px 12px", background: "#000", color: "#fff", fontSize: 9, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", border: "none", cursor: "pointer", borderRadius: 2 }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingProdCat(false);
+                      setNewCatName("");
+                    }}
+                    style={{ padding: "6px 10px", background: "#fff", color: "#000", fontSize: 9, fontWeight: 700, border: "1.5px solid #000", cursor: "pointer", borderRadius: 2 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {productCategories.map((cat) => (
+                  <div key={cat} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", background: "#f5f5f5", border: "1px solid #e5e5e5", borderRadius: 2 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: "capitalize", letterSpacing: ".04em" }}>{cat}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (productCategories.length <= 1) return;
+                        if (!window.confirm(`Delete category "${cat}"? Products in this category will need reassigning.`)) return;
+                        setProductCategories((prev) => prev.filter((c) => c !== cat));
+                      }}
+                      style={{ background: "none", border: "none", color: "#bbb", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 0 0 2px" }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
             {products.map((p) => {
               const listThumb =
                 p.colors?.flatMap((c) => c.images).find((u) => u != null && u !== "") ?? null;
@@ -1684,30 +1770,58 @@ export default function AdminPage() {
               <div key={p.id} style={{ background: "#fff", border: "1px solid #e5e5e5", marginBottom: 10, padding: 14 }}>
                 {editingProdId === p.id ? (
                   <div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-                      {(
-                        [
-                          { label: "Product Name", key: "name" as const, type: "text" },
-                          { label: "Price ($)", key: "price" as const, type: "number" },
-                          { label: "Category", key: "category" as const, type: "text" },
-                          { label: "Sizes", key: "sizes" as const, type: "text" },
-                        ] as const
-                      ).map((f) => (
-                        <div key={f.key}>
-                          <span style={S.lbl}>{f.label}</span>
-                          <input
-                            type={f.type}
-                            value={String(prodEditData[f.key] ?? "")}
-                            onChange={(e) =>
-                              setProdEditData((d) => ({
-                                ...d,
-                                [f.key]: e.target.value,
-                              }))
-                            }
-                            style={S.inp}
-                          />
-                        </div>
-                      ))}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+                      <div>
+                        <span style={S.lbl}>Product Name</span>
+                        <input
+                          type="text"
+                          value={String(prodEditData.name ?? "")}
+                          onChange={(e) =>
+                            setProdEditData((d) => ({ ...d, name: e.target.value }))
+                          }
+                          style={S.inp}
+                        />
+                      </div>
+                      <div>
+                        <span style={S.lbl}>Price ($)</span>
+                        <input
+                          type="number"
+                          value={String(prodEditData.price ?? "")}
+                          onChange={(e) =>
+                            setProdEditData((d) => ({ ...d, price: e.target.value }))
+                          }
+                          style={S.inp}
+                        />
+                      </div>
+                      <div>
+                        <span style={S.lbl}>Category</span>
+                        <select
+                          value={String(prodEditData.category ?? "")}
+                          onChange={(e) =>
+                            setProdEditData((d) => ({ ...d, category: e.target.value }))
+                          }
+                          style={{ ...S.inp, appearance: "none", cursor: "pointer" }}
+                        >
+                          <option value="">Select category</option>
+                          {productCategories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <span style={S.lbl}>Sizes (comma separated)</span>
+                        <input
+                          type="text"
+                          value={String(prodEditData.sizes ?? "")}
+                          onChange={(e) =>
+                            setProdEditData((d) => ({ ...d, sizes: e.target.value }))
+                          }
+                          style={S.inp}
+                          placeholder="XS,S,M,L,XL"
+                        />
+                      </div>
                     </div>
 
                     <div style={{ marginBottom: 16 }}>
