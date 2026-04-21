@@ -18,3 +18,13 @@ export async function PATCH(req: NextRequest) {
   const { error } = await supabase.from("products").update(updates).eq("id", id);
   return NextResponse.json({ ok: !error, error: error?.message });
 }
+
+export async function DELETE(req: NextRequest) {
+  const body = (await req.json()) as Record<string, unknown>;
+  const id = Number(body.id);
+  if (!Number.isFinite(id)) {
+    return NextResponse.json({ ok: false, error: "Invalid product id" }, { status: 400 });
+  }
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  return NextResponse.json({ ok: !error, error: error?.message });
+}

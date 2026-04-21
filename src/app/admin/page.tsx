@@ -2233,29 +2233,58 @@ export default function AdminPage() {
                         ${p.price} · {p.type} · {p.sizes.join(",")}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingProdId(p.id);
-                        setProdEditData({
-                          ...p,
-                          category: p.type,
-                          sizes: p.sizes.join(","),
-                        });
-                      }}
-                      style={{
-                        padding: "7px 14px",
-                        border: "1.5px solid #000",
-                        background: "#fff",
-                        fontSize: 9,
-                        fontWeight: 700,
-                        letterSpacing: ".1em",
-                        textTransform: "uppercase",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Edit
-                    </button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingProdId(p.id);
+                          setProdEditData({
+                            ...p,
+                            category: p.type,
+                            sizes: p.sizes.join(","),
+                          });
+                        }}
+                        style={{
+                          padding: "7px 14px",
+                          border: "1.5px solid #000",
+                          background: "#fff",
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: ".1em",
+                          textTransform: "uppercase",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
+                          setProducts((prev) => prev.filter((x) => x.id !== p.id));
+                          const res = await fetch("/api/products", {
+                            method: "DELETE",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id: p.id }),
+                          });
+                          const result = (await res.json()) as { ok?: boolean; error?: string };
+                          if (!result.ok) window.alert("Delete failed: " + (result.error ?? "unknown"));
+                        }}
+                        style={{
+                          padding: "7px 12px",
+                          border: "1.5px solid #dc2626",
+                          background: "#fff",
+                          color: "#dc2626",
+                          fontSize: 9,
+                          fontWeight: 700,
+                          letterSpacing: ".1em",
+                          textTransform: "uppercase",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
